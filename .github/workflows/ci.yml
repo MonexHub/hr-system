@@ -42,7 +42,7 @@ jobs:
   deploy:
     needs: laravel-tests
     runs-on: ubuntu-latest
-    if: success() # Ensure deploy only runs if tests pass
+    if: success()
 
     steps:
       - name: Checkout code
@@ -55,4 +55,4 @@ jobs:
 
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no root@109.199.106.235 "cd /var/www/html/hr-system && git pull origin main && php artisan migrate --force && php artisan config:cache"
+         ssh -o StrictHostKeyChecking=no root@109.199.106.235 "cd /var/www/html/hr-system && git pull origin main && php artisan migrate --force && php artisan config:cache"
