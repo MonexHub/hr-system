@@ -4,7 +4,7 @@ use App\Filament\Employee\Pages\CompleteProfile;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->to('/admin/login');
 });
 use App\Http\Controllers\Admin\EmployeeProfileController;
 
