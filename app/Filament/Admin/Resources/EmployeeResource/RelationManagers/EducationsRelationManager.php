@@ -9,7 +9,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Storage;
 
-class EducationRelationManager extends RelationManager
+class EducationsRelationManager extends RelationManager
 {
     protected static string $relationship = 'education';
 

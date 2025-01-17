@@ -4,7 +4,7 @@ namespace App\Filament\Admin\Resources;
 
 use App\Filament\Actions\ExportEmployeeProfileAction;
 use App\Filament\Admin\Resources\EmployeeResource\Pages;
-use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\EducationRelationManager;
+use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\EducationsRelationManager;
 use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\ExperienceRelationManager;
 use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\LeaveRequestsRelationManager;
 use App\Filament\Imports\EmployeeImporter;
@@ -304,7 +304,7 @@ class EmployeeResource extends Resource
     {
         return [
            LeaveRequestsRelationManager::class,
-          EducationRelationManager::class,
+            EducationsRelationManager::class,
            ExperienceRelationManager::class,
         ];
     }
