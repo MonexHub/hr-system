@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\DepartmentHeadcountChanged;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,6 +15,7 @@ class Department extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'organization_unit_id',
         'name',
         'code',
         'description',
@@ -230,11 +232,15 @@ class Department extends Model
     {
         parent::boot();
 
-        // Automatically update headcount when employees are added/removed
         static::updated(function ($department) {
             if ($department->isDirty('current_headcount')) {
                 event(new DepartmentHeadcountChanged($department));
             }
         });
+    }
+
+    public function organizationUnit(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationUnit::class);
     }
 }

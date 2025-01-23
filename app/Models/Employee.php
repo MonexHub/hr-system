@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Hash;
 
 class Employee extends Model
 {
@@ -23,6 +24,7 @@ class Employee extends Model
         'birthdate',
         'profile_photo',
         'phone_number',
+        'email',
         'permanent_address',
         'city',
         'state',
@@ -73,11 +75,6 @@ class Employee extends Model
         return $this->belongsTo(County::class);
     }
 
-    // Related entities
-    public function documents(): HasMany
-    {
-        return $this->hasMany(EmployeeDocument::class);
-    }
 
     public function emergencyContacts(): HasMany
     {
@@ -89,10 +86,7 @@ class Employee extends Model
         return $this->hasMany(EmployeeEducation::class);
     }
 
-    public function certifications(): HasMany
-    {
-        return $this->hasMany(EmployeeCertification::class);
-    }
+
 
     public function workExperiences(): HasMany
     {
@@ -157,6 +151,23 @@ class Employee extends Model
         static::creating(function ($employee) {
             $employee->employee_code = self::generateEmployeeCode();
         });
+
+        static::created(function ($employee) {
+            if (request()->input('create_user_account')) {
+                $user = User::create([
+                    'name' => $employee->full_name,
+                    'email' => $employee->email,
+                    'password' => Hash::make(request()->input('password')),
+                ]);
+
+                $employee->user()->associate($user);
+                $employee->save();
+
+                if (request()->input('roles')) {
+                    $user->syncRoles(request()->input('roles'));
+                }
+            }
+        });
     }
 
     public static function generateEmployeeCode(): string
@@ -184,5 +195,17 @@ class Employee extends Model
     public function yearsOfService(): int
     {
         return $this->appointment_date->diffInYears(now());
+    }
+
+    public function organizationUnit()
+    {
+        return $this->belongsTo(OrganizationUnit::class, 'unit_id');
+    }
+
+    protected $appends = ['full_name'];
+
+    public function getFullNameAttribute(): string
+    {
+        return "{$this->first_name} {$this->last_name}";
     }
 }

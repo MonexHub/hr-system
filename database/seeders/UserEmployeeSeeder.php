@@ -4,12 +4,8 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\Employee;
-use App\Models\EmployeeEducation;
-use App\Models\EmployeeSkill;
-use App\Models\EmployeeDocument;
-use App\Models\EmployeeEmergencyContact;
-use App\Models\EmployeeTraining;
-use App\Models\EmployeeWorkExperience;
+use App\Models\Department;
+use App\Models\OrganizationUnit;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -17,161 +13,113 @@ class UserEmployeeSeeder extends Seeder
 {
     public function run(): void
     {
-        // Create Admin
-        $admin = User::create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $admin->assignRole('admin');
+        $hrDepartment = Department::where('name', 'Human Resources')->first();
+        $hrUnit = OrganizationUnit::where('name', 'Human Resources')->first();
+        $itDepartment = Department::where('name', 'Software Development')->first();
+        $itUnit = OrganizationUnit::where('name', 'Software Development')->first();
+
+        // Create Super Admin
+        $admin = $this->createUserAndEmployee(
+            'Admin User',
+            'admin@monex.co.tz',
+            'super_admin',
+            $hrDepartment,
+            $hrUnit,
+            'Administrator'
+        );
 
         // Create HR Manager
-        $hrManager = User::create([
-            'name' => 'HR Manager',
-            'email' => 'hr@example.com',
-            'password' => Hash::make('@Dmin2021!'),
-        ]);
-        $hrManager->assignRole('hr');
-
-        $hrEmployee = Employee::create([
-            'user_id' => $hrManager->id,
-            'employee_code' => 'HR001',
-            'first_name' => 'Juma',
-            'last_name' => 'Hamisi',
-            'middle_name' => 'Said',
-            'gender' => 'male',
-            'birthdate' => '1990-01-01',
-            'phone_number' => '+255742000001',
-            'permanent_address' => 'Plot 123, Masaki',
-            'city' => 'Dar es Salaam',
-            'state' => 'Dar es Salaam',
-            'postal_code' => '12345',
-            'contract_type' => 'permanent',
-            'terms_of_employment' => 'full-time',
-            'appointment_date' => '2023-01-01',
-            'job_title' => 'HR Manager',
-            'branch' => 'Head Office',
-            'department_id' => 1,
-            'salary' => 2500000,
-            'employment_status' => 'active',
-            'application_status' => 'active',
-        ]);
-
-        // HR Manager's Emergency Contact
-        EmployeeEmergencyContact::create([
-            'employee_id' => $hrEmployee->id,
-            'name' => 'Fatuma Ali',
-            'relationship' => 'sister',
-            'phone' => '+255742000006',
-            'alternative_phone' => '+255742000007',
-            'email' => 'fatuma@example.com',
-            'address' => 'P.O. Box 12345, Dar es Salaam',
-        ]);
-
-        // HR Manager's Education
-        EmployeeEducation::create([
-            'employee_id' => $hrEmployee->id,
-            'institution' => 'University of Dar es Salaam',
-            'degree' => 'Bachelor Degree',
-            'field_of_study' => 'Human Resource Management',
-            'start_date' => '2008-01-01',
-            'end_date' => '2012-12-31',
-            'grade' => 3.8,
-        ]);
-
-        // HR Manager's Skills
-        EmployeeSkill::create([
-            'employee_id' => $hrEmployee->id,
-            'skill_name' => 'Human Resource Management',
-            'proficiency_level' => 'expert',
-            'category' => 'technical',
-            'years_of_experience' => 10,
-        ]);
+        $hrManager = $this->createUserAndEmployee(
+            'Edgar Aidan',
+            'edgar@monex.co.tz',
+            'hr_manager',
+            $hrDepartment,
+            $hrUnit,
+            'HR Manager',
+            $admin->employee->id
+        );
 
         // Create IT Manager
-        $itManager = User::create([
-            'name' => 'IT Manager',
-            'email' => 'manager@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $itManager->assignRole('manager');
+        $itManager = $this->createUserAndEmployee(
+            'James Kanga',
+            'james@monex.co.tz',
+            'department_manager',
+            $itDepartment,
+            $itUnit,
+            'IT Manager',
+            $hrManager->employee->id
+        );
 
-        $itEmployee = Employee::create([
-            'user_id' => $itManager->id,
-            'employee_code' => 'IT001',
-            'first_name' => 'Abdul',
-            'last_name' => 'Rahman',
-            'middle_name' => 'Kassim',
+        // Create Developer
+        $this->createUserAndEmployee(
+            'David John',
+            'david@monex.co.tz',
+            'employee',
+            $itDepartment,
+            $itUnit,
+            'Software Developer',
+            $itManager->employee->id
+        );
+
+        $this->updateHeadcounts([$hrDepartment, $itDepartment], [$hrUnit, $itUnit]);
+    }
+
+    private function createUserAndEmployee($name, $email, $role, $department, $unit, $jobTitle, $reportingTo = null)
+    {
+        $user = User::create([
+            'name' => $name,
+            'email' => $email,
+            'password' => Hash::make('password123')
+        ]);
+
+        $user->assignRole($role);
+
+        $nameParts = explode(' ', $name);
+        $employee = Employee::create([
+            'user_id' => $user->id,
+            'employee_code' => 'EMP' . str_pad(Employee::count() + 1, 3, '0', STR_PAD_LEFT),
+            'first_name' => $nameParts[0],
+            'last_name' => $nameParts[1] ?? '',
             'gender' => 'male',
-            'birthdate' => '1985-01-01',
-            'phone_number' => '+255742000008',
-            'permanent_address' => 'Plot 456, Mikocheni',
+            'birthdate' => '1990-01-01',
+            'phone_number' => '+255742' . str_pad(Employee::count() + 1, 6, '0', STR_PAD_LEFT),
+            'email' => $email,
+            'permanent_address' => 'Dar es Salaam',
             'city' => 'Dar es Salaam',
             'state' => 'Dar es Salaam',
             'postal_code' => '12345',
-            'contract_type' => 'permanent',
-            'terms_of_employment' => 'full-time',
-            'appointment_date' => '2023-01-01',
-            'job_title' => 'IT Manager',
-            'branch' => 'Head Office',
-            'department_id' => 2,
-            'salary' => 3000000,
+            'job_title' => $jobTitle,
+            'department_id' => $department?->id,
+            'unit_id' => $unit?->id,
+            'salary' => match($role) {
+                'super_admin' => 3500000,
+                'hr_manager' => 3000000,
+                'department_manager' => 2500000,
+                default => 1800000,
+            },
             'employment_status' => 'active',
             'application_status' => 'active',
-            'reporting_to' => $hrEmployee->id,
-        ]);
-
-        // Create Regular Employee
-        $employee = User::create([
-            'name' => 'Software Developer',
-            'email' => 'filament@example.com',
-            'password' => Hash::make('password'),
-        ]);
-        $employee->assignRole('filament');
-
-        $devEmployee = Employee::create([
-            'user_id' => $employee->id,
-            'employee_code' => 'IT002',
-            'first_name' => 'Baraka',
-            'last_name' => 'John',
-            'middle_name' => 'Peter',
-            'gender' => 'male',
-            'birthdate' => '1995-01-01',
-            'phone_number' => '+255742000011',
-            'permanent_address' => 'Plot 789, Kinondoni',
-            'city' => 'Dar es Salaam',
-            'state' => 'Dar es Salaam',
-            'postal_code' => '12345',
             'contract_type' => 'permanent',
-            'terms_of_employment' => 'full-time',
-            'appointment_date' => '2023-01-01',
-            'job_title' => 'Software Developer',
-            'branch' => 'Head Office',
-            'department_id' => 2,
-            'salary' => 1800000,
-            'employment_status' => 'active',
-            'application_status' => 'active',
-            'reporting_to' => $itEmployee->id,
+            'appointment_date' => now(),
+            'reporting_to' => $reportingTo
         ]);
 
-        // Developer's Education
-        EmployeeEducation::create([
-            'employee_id' => $devEmployee->id,
-            'institution' => 'University of Dodoma',
-            'degree' => 'Bachelor Degree',
-            'field_of_study' => 'Computer Science',
-            'start_date' => '2014-01-01',
-            'end_date' => '2018-12-31',
-            'grade' => 3.5,
-        ]);
+        $user->employee = $employee;
+        return $user;
+    }
 
-        // Developer's Skills
-        EmployeeSkill::create([
-            'employee_id' => $devEmployee->id,
-            'skill_name' => 'Software Development',
-            'proficiency_level' => 'expert',
-            'category' => 'technical',
-            'years_of_experience' => 5,
-        ]);
+    private function updateHeadcounts(?array $departments, ?array $units): void
+    {
+        foreach ($departments as $department) {
+            if ($department) {
+                $department->update(['current_headcount' => $department->employees()->count()]);
+            }
+        }
+
+        foreach ($units as $unit) {
+            if ($unit) {
+                $unit->update(['current_headcount' => $unit->employees()->count()]);
+            }
+        }
     }
 }

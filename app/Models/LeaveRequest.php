@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Notifications\LeaveRequestNotification;
+use Filament\Notifications\Actions\Action;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -36,37 +38,71 @@ class LeaveRequest extends Model
     ];
 
     // Boot method for notifications
-    protected static function booted()
+    protected static function booted(): void
     {
         static::created(function ($leaveRequest) {
-            // Notify line manager
             $lineManager = $leaveRequest->employee->reportingTo?->user;
             if ($lineManager) {
+                // Database notification
+                Notification::make()
+                    ->warning()
+                    ->title('New Leave Request')
+                    ->body("New request from {$leaveRequest->employee->full_name}")
+                    ->actions([
+                        Action::make('view')
+                            ->button()
+                            ->url(route('filament.admin.resources.leave-requests.view', $leaveRequest))
+                    ])
+                    ->sendToDatabase($lineManager);
+
+                // Email notification
                 $lineManager->notify(new LeaveRequestNotification($leaveRequest, 'new_request'));
             }
         });
 
         static::updated(function ($leaveRequest) {
-            // Manager approval notification
             if ($leaveRequest->isDirty('manager_approved_at') && $leaveRequest->manager_approved_at) {
-                // Notify HR team
-                User::role('hr')->get()->each(function ($hrUser) use ($leaveRequest) {
+                User::role('hr_manager')->get()->each(function ($hrUser) use ($leaveRequest) {
+                    // Database notification
+                    Notification::make()
+                        ->info()
+                        ->title('Manager Approved Leave Request')
+                        ->body("Request approved for {$leaveRequest->employee->full_name}")
+                        ->actions([
+                            Action::make('view')
+                                ->button()
+                                ->url(route('filament.admin.resources.leave-requests.view', $leaveRequest))
+                        ])
+                        ->sendToDatabase($hrUser);
+
+                    // Email notification
                     $hrUser->notify(new LeaveRequestNotification($leaveRequest, 'manager_approval'));
                 });
             }
 
-            // Final status update notification
-            if ($leaveRequest->isDirty('approved_at') || $leaveRequest->isDirty('status')) {
+            if ($leaveRequest->isDirty('status')) {
+                $status = match($leaveRequest->status) {
+                    'approved' => ['success', 'Approved'],
+                    'rejected' => ['danger', 'Rejected'],
+                    default => ['info', $leaveRequest->status]
+                };
+
+                // Database notification
+                Notification::make()
+                    ->{$status[0]}()
+                    ->title("Leave Request {$status[1]}")
+                    ->body("Your leave request has been {$leaveRequest->status}")
+                    ->actions([
+                        Action::make('view')
+                            ->button()
+                            ->url(route('filament.admin.resources.leave-requests.view', $leaveRequest))
+                    ])
+                    ->sendToDatabase($leaveRequest->employee->user);
+
+                // Email notification
                 $leaveRequest->employee->user->notify(
                     new LeaveRequestNotification($leaveRequest, 'status_update')
                 );
-
-                // If rejected, also notify the line manager
-                if ($leaveRequest->status === 'rejected' && $leaveRequest->employee->reportingTo?->user) {
-                    $leaveRequest->employee->reportingTo->user->notify(
-                        new LeaveRequestNotification($leaveRequest, 'request_rejected')
-                    );
-                }
             }
         });
     }

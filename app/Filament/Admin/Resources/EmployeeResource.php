@@ -18,6 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Support\Colors\Color;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class EmployeeResource extends Resource
 {
@@ -146,6 +147,15 @@ class EmployeeResource extends Resource
                             Forms\Components\TextInput::make('phone_number')
                                 ->tel()
                                 ->required(),
+                            Forms\Components\TextInput::make('email')
+                                ->email()
+                                ->required()
+                                ->unique(ignoreRecord: true)
+                                ->afterStateHydrated(function ($component, $state, ?Employee $record) {
+                                    if (!$state && $record) {
+                                        $component->state($record->user?->email);
+                                    }
+                                }),
                             Forms\Components\TextInput::make('permanent_address')
                                 ->required(),
 
@@ -158,11 +168,10 @@ class EmployeeResource extends Resource
                             Forms\Components\TextInput::make('postal_code'),
 
                             Forms\Components\TextInput::make('emergency_contact_name')
-                                ->required(),
+                              ,
 
                             Forms\Components\TextInput::make('emergency_contact_phone')
-                                ->tel()
-                                ->required(),
+                                ->tel(),
                         ])
                         ->columns(2),
 
@@ -208,7 +217,9 @@ class EmployeeResource extends Resource
 
                             Forms\Components\Select::make('roles')
                                 ->multiple()
-                                ->relationship('user.roles', 'name')
+                                ->options(function () {
+                                    return Role::all()->pluck('name', 'name');
+                                })
                                 ->preload()
                                 ->visible(fn (callable $get) => $get('create_user_account')),
                         ])
@@ -223,8 +234,13 @@ class EmployeeResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\ImageColumn::make('profile_photo')
-                    ->circular(),
-
+                    ->circular()
+                    ->defaultImageUrl(function (Employee $record): string {
+                        $name = urlencode($record->full_name);
+                        return "https://ui-avatars.com/api/?name={$name}&background=0D8ABC&color=fff&size=150&bold=true";
+                    })
+                    ->extraImgAttributes(['loading' => 'lazy'])
+                    ->size(40),
                 Tables\Columns\TextColumn::make('employee_code')
                     ->searchable()
                     ->sortable(),
@@ -237,6 +253,11 @@ class EmployeeResource extends Resource
                 Tables\Columns\TextColumn::make('department.name')
                     ->searchable()
                     ->sortable(),
+                Tables\Columns\TextColumn::make('organizationUnit.name')
+                ->label('Unit')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
 
                 Tables\Columns\TextColumn::make('employment_status')
                     ->badge()

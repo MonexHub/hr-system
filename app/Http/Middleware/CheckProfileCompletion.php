@@ -19,7 +19,7 @@ class CheckProfileCompletion
         ];
 
         // If not authenticated or on bypass routes, proceed
-        if (!Auth::check() || $request->routeIs($bypassRoutes)) {
+        if (Auth::check() || $request->routeIs($bypassRoutes)) {
             return $next($request);
         }
 

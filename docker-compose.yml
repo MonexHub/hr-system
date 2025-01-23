@@ -1,0 +1,35 @@
+version: '3'
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: monexhub_app
+        volumes:
+            - .:/var/www/html
+        ports:
+            - "8000:8000"
+        networks:
+            - monexhub-net
+        depends_on:
+            - db
+
+    db:
+        image: mysql:8.0
+        container_name: monexhub_db
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: hr-system
+            MYSQL_ALLOW_EMPTY_PASSWORD: "yes"  # This allows empty root password
+        ports:
+            - "3306:3306"
+        volumes:
+            - dbdata:/var/lib/mysql
+        networks:
+            - monexhub-net
+
+networks:
+    monexhub-net:
+
+volumes:
+    dbdata:

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->foreignId('parent_id')->nullable()->constrained('departments')->nullOnDelete();
             $table->foreignId('manager_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('organization_unit_id')->nullable()->constrained('organization_units')->nullOnDelete();
             $table->boolean('is_active')->default(true);
             $table->string('phone')->nullable();
             $table->string('email')->nullable();
@@ -23,6 +24,7 @@ return new class extends Migration
             $table->integer('current_headcount')->default(0);
             $table->integer('max_headcount')->default(0);
             $table->timestamps();
+
             $table->softDeletes();
         });
     }

@@ -15,6 +15,7 @@ return new class extends Migration
             $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('employee_code')->unique();
             $table->enum('application_status', ['profile_incomplete', 'active', 'inactive'])->default('profile_incomplete');
+            $table->foreignId('unit_id')->nullable()->constrained('organization_units')->nullOnDelete();
 
             // Basic Information
             $table->string('first_name');

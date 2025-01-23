@@ -38,42 +38,49 @@ class LeaveRequestNotification extends Notification implements ShouldQueue
     protected function newRequestMail(): MailMessage
     {
         return (new MailMessage)
-            ->subject('New Leave Request Requires Your Approval')
-            ->greeting('Hello ' . $this->leaveRequest->employee->reportingTo->first_name)
-            ->line('A new leave request has been submitted and requires your approval.')
-            ->line("Employee: {$this->leaveRequest->employee->full_name}")
-            ->line("Type: {$this->leaveRequest->leaveType->name}")
-            ->line("Period: {$this->leaveRequest->start_date->format('d/m/Y')} - {$this->leaveRequest->end_date->format('d/m/Y')}")
-            ->line("Days: {$this->leaveRequest->days_taken}")
-            ->action('Review Request', url("/admin/leave-requests/{$this->leaveRequest->id}"));
+            ->subject('🔔 New Leave Request: Action Required')
+            ->greeting("Hello {$this->leaveRequest->employee->reportingTo->first_name},")
+            ->line("**Action Required**: New leave request submitted by {$this->leaveRequest->employee->full_name}")
+            ->line("**Request Details:**")
+            ->line("• Leave Type: {$this->leaveRequest->leaveType->name}")
+            ->line("• Period: {$this->leaveRequest->start_date->format('D, d M Y')} - {$this->leaveRequest->end_date->format('D, d M Y')}")
+            ->line("• Days Requested: {$this->leaveRequest->days_taken} days")
+            ->line("• Reason: {$this->leaveRequest->reason}")
+            ->action('Review Request', url("/admin/leave-requests/{$this->leaveRequest->id}"))
+            ->line("Please review and take action on this request.");
     }
 
     protected function managerApprovalMail(): MailMessage
     {
         return (new MailMessage)
-            ->subject('Leave Request Approved by Manager - HR Review Required')
-            ->line('A leave request has been approved by the line manager and requires HR review.')
-            ->line("Employee: {$this->leaveRequest->employee->full_name}")
-            ->line("Approved by: {$this->leaveRequest->managerApprover->name}")
+            ->subject('👥 Leave Request: Manager Approved - HR Review Required')
+            ->greeting("Hello HR Team,")
+            ->line("A leave request has been approved by the line manager and requires HR review")
+            ->line("**Request Details:**")
+            ->line("• Employee: {$this->leaveRequest->employee->full_name}")
+            ->line("• Department: {$this->leaveRequest->employee->department->name}")
+            ->line("• Approved By: {$this->leaveRequest->managerApprover->name}")
             ->action('Review Request', url("/admin/leave-requests/{$this->leaveRequest->id}"));
     }
 
     protected function statusUpdateMail(): MailMessage
     {
         $status = match($this->leaveRequest->status) {
-            'approved' => 'approved ✓',
-            'rejected' => 'rejected ✗',
-            default => $this->leaveRequest->status,
+            'approved' => '✅ Approved',
+            'rejected' => '❌ Rejected',
+            default => $this->leaveRequest->status
         };
 
         return (new MailMessage)
             ->subject("Leave Request {$status}")
-            ->greeting("Hello {$this->leaveRequest->employee->first_name}")
-            ->line("Your leave request has been {$status}.")
+            ->greeting("Hello {$this->leaveRequest->employee->first_name},")
+            ->line("Your leave request has been {$this->leaveRequest->status}")
+            ->line("**Request Details:**")
+            ->line("• Leave Type: {$this->leaveRequest->leaveType->name}")
+            ->line("• Period: {$this->leaveRequest->start_date->format('D, d M Y')} - {$this->leaveRequest->end_date->format('D, d M Y')}")
             ->when($this->leaveRequest->rejection_reason, function (MailMessage $mail) {
-                return $mail->line("Reason: {$this->leaveRequest->rejection_reason}");
+                return $mail->line("• Rejection Reason: {$this->leaveRequest->rejection_reason}");
             })
-            ->line("Period: {$this->leaveRequest->start_date->format('d/m/Y')} - {$this->leaveRequest->end_date->format('d/m/Y')}")
             ->action('View Details', url("/employee/leave-requests/{$this->leaveRequest->id}"));
     }
 
