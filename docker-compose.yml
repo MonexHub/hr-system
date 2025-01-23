@@ -20,7 +20,7 @@ services:
             MYSQL_DATABASE: monex_db
             MYSQL_ROOT_PASSWORD: '@Dmin2021!'
         ports:
-            - "3306:3306"
+            - "3307:3306"
         volumes:
             - mysql-data:/var/lib/mysql
         networks:
