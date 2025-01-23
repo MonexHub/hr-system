@@ -1,69 +1,73 @@
-  name: Monex HR CI/CD
+name: Monex HR CI/CD
 
-  on:
-    push:
-      branches: [ "main" ]
-    pull_request:
-      branches: [ "main" ]
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
-  jobs:
-    laravel-tests:
-      runs-on: ubuntu-latest
+jobs:
+  laravel-tests:
+    runs-on: ubuntu-latest
 
-      services:
-        mysql:
-          image: mysql:8.0
-          env:
-            MYSQL_ROOT_PASSWORD: '@Dmin2021!'
-            MYSQL_DATABASE: sandbox
-          ports:
-            - 3306:3306
-          options: --health-cmd="mysqladmin ping" --health-interval=10s --health-retries=3
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: false
+          MYSQL_ROOT_PASSWORD: '@Dmin2021!'
+          MYSQL_DATABASE: sandbox
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-retries=3
+          --health-start-period=5s
+          --health-timeout=2s
 
-      steps:
-        - uses: actions/checkout@v3
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_mysql
 
-        - name: Set up PHP
-          uses: shivammathur/setup-php@v2
-          with:
-            php-version: '8.2'
-            extensions: mbstring, dom, fileinfo, pdo_mysql
+      - name: Install
+        run: |
+          cp .env.example .env
+          composer install -q --no-ansi --no-interaction --no-scripts --no-progress
+          php artisan key:generate
+          chmod -R 777 storage bootstrap/cache
 
-        - name: Copy .env & Install
-          run: |
-            cp .env.example .env
-            sed -i 's/DB_DATABASE=laravel/DB_DATABASE=sandbox/' .env
-            sed -i 's/DB_PASSWORD=/DB_PASSWORD=@Dmin2021!/' .env
-            composer install -q --no-ansi --no-interaction --no-scripts --no-progress
-            php artisan key:generate
-            chmod -R 777 storage bootstrap/cache
+      - name: Test
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: sandbox
+          DB_USERNAME: root
+          DB_PASSWORD: '@Dmin2021!'
+        run: |
+          mysql --host=127.0.0.1 --port=3306 -uroot -p'@Dmin2021!' -e 'CREATE DATABASE IF NOT EXISTS sandbox;'
+          php artisan migrate --force
+          php artisan test
 
-        - name: Test
-          run: |
-            php artisan migrate --force --exclude-migration=2025_01_13_182253_create_recruitment_system
-            php artisan test
-          env:
-            DB_CONNECTION: mysql
-            DB_HOST: 127.0.0.1
-            DB_DATABASE: sandbox
-            DB_USERNAME: root
-            DB_PASSWORD: '@Dmin2021!'
-
-    deploy:
-      needs: laravel-tests
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v3
-        - name: Deploy
-          uses: appleboy/ssh-action@master
-          with:
-            host: 109.199.106.235
-            username: root
-            key: ${{ secrets.SERVER_SSH_KEY }}
-            script: |
-              cd /var/www/html/hr-system
-              docker-compose down
-              docker-compose up -d --build
-              docker-compose exec -T app php artisan migrate --force --exclude-migration=2025_01_13_182253_create_recruitment_system
-              docker-compose exec -T app php artisan optimize:clear
-
+  deploy:
+    needs: laravel-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: 109.199.106.235
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /var/www/html/hr-system
+            docker-compose down
+            docker-compose up -d --build
+            docker-compose exec -T app php artisan migrate --force
+            docker-compose exec -T app php artisan optimize:clear
