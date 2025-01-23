@@ -18,6 +18,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html/hr-system
 
+COPY apache-config.conf /etc/apache2/sites-available/000-default.conf
 RUN a2enmod rewrite
 
 COPY . /var/www/html/hr-system
