@@ -65,12 +65,12 @@ class AdminPanelProvider extends PanelProvider
                 Widgets\FilamentInfoWidget::class,
             ])
             ->plugins([
-                FilamentBackgroundsPlugin::make()
-                    ->imageProvider(
-                        MyImages::make()
-                            ->directory('images/backgrounds')
-                    )
-                    ->showAttribution(false),
+//                FilamentBackgroundsPlugin::make()
+//                    ->imageProvider(
+//                        MyImages::make()
+//                            ->directory('images/backgrounds')
+//                    )
+//                    ->showAttribution(false),
            ])
             // Middleware
             ->middleware([

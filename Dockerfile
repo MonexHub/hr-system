@@ -27,7 +27,7 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
-WORKDIR /var/www/html
+WORKDIR /var/www/html/hr-system
 
 # Copy existing application directory
 COPY . .
@@ -41,5 +41,6 @@ RUN composer install --no-interaction
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
-EXPOSE 8000
-CMD php artisan serve --host=0.0.0.0
+EXPOSE 9000
+
+CMD ["php-fpm"]
