@@ -6,9 +6,9 @@ services:
         container_name: monex-app
         restart: unless-stopped
         volumes:
-            - ./:/var/www/html
+            - ./:/var/www/html/hr-system
         ports:
-            - "80:80"
+            - "9000:80"
         networks:
             - monex-network
 
