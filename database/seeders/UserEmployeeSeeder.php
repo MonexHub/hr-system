@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 
 class UserEmployeeSeeder extends Seeder
 {
-    public function run(): void
+    public function run()
     {
         $hrDepartment = Department::where('name', 'Human Resources')->first();
         $hrUnit = OrganizationUnit::where('name', 'Human Resources')->first();
@@ -61,25 +61,25 @@ class UserEmployeeSeeder extends Seeder
             $itManager->employee->id
         );
 
-        $this->updateHeadcounts([$hrDepartment, $itDepartment], [$hrUnit, $itUnit]);
+        $this->updateHeadcounts(array($hrDepartment, $itDepartment), array($hrUnit, $itUnit));
     }
 
     private function createUserAndEmployee($name, $email, $role, $department, $unit, $jobTitle, $reportingTo = null)
     {
-        $user = User::create([
+        $user = User::create(array(
             'name' => $name,
             'email' => $email,
             'password' => Hash::make('password123')
-        ]);
+        ));
 
         $user->assignRole($role);
 
         $nameParts = explode(' ', $name);
-        $employee = Employee::create([
+        $employee = Employee::create(array(
             'user_id' => $user->id,
             'employee_code' => 'EMP' . str_pad(Employee::count() + 1, 3, '0', STR_PAD_LEFT),
             'first_name' => $nameParts[0],
-            'last_name' => $nameParts[1] ?? '',
+            'last_name' => isset($nameParts[1]) ? $nameParts[1] : '',
             'gender' => 'male',
             'birthdate' => '1990-01-01',
             'phone_number' => '+255742' . str_pad(Employee::count() + 1, 6, '0', STR_PAD_LEFT),
@@ -89,36 +89,41 @@ class UserEmployeeSeeder extends Seeder
             'state' => 'Dar es Salaam',
             'postal_code' => '12345',
             'job_title' => $jobTitle,
-            'department_id' => $department?->id,
-            'unit_id' => $unit?->id,
-            'salary' => match($role) {
-                'super_admin' => 3500000,
-                'hr_manager' => 3000000,
-                'department_manager' => 2500000,
-                default => 1800000,
-            },
+            'department_id' => $department ? $department->id : null,
+            'unit_id' => $unit ? $unit->id : null,
+            'salary' => $this->getSalaryByRole($role),
             'employment_status' => 'active',
             'application_status' => 'active',
             'contract_type' => 'permanent',
             'appointment_date' => now(),
             'reporting_to' => $reportingTo
-        ]);
+        ));
 
         $user->employee = $employee;
         return $user;
     }
 
-    private function updateHeadcounts(?array $departments, ?array $units): void
+    private function getSalaryByRole($role)
+    {
+        $salaries = array(
+            'super_admin' => 3500000,
+            'hr_manager' => 3000000,
+            'department_manager' => 2500000
+        );
+        return isset($salaries[$role]) ? $salaries[$role] : 1800000;
+    }
+
+    private function updateHeadcounts($departments, $units)
     {
         foreach ($departments as $department) {
             if ($department) {
-                $department->update(['current_headcount' => $department->employees()->count()]);
+                $department->update(array('current_headcount' => $department->employees()->count()));
             }
         }
 
         foreach ($units as $unit) {
             if ($unit) {
-                $unit->update(['current_headcount' => $unit->employees()->count()]);
+                $unit->update(array('current_headcount' => $unit->employees()->count()));
             }
         }
     }

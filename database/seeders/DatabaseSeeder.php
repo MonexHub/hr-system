@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
 //            JobPostingSeeder::class,
             OrganizationUnitSeeder::class,
             DepartmentSeeder::class,
+            UpdateHRPermissionsSeeder::class,
             UserEmployeeSeeder::class
 
         ]);

@@ -391,6 +391,36 @@ class LeaveRequestResource extends Resource
         return 'warning';
     }
 
+    public static function getPermissionPrefixes(): array
+    {
+        return [
+            'view',
+            'view_any',
+            'create',
+            'update',
+            'delete',
+            'approve',
+            'reject'
+        ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        if (auth()->user()->hasRole('employee')) {
+            return $query->where('employee_id', auth()->user()->employee->id);
+        }
+
+        if (auth()->user()->hasRole('department_manager')) {
+            return $query->whereHas('employee', function ($query) {
+                $query->where('department_id', auth()->user()->employee->department_id);
+            });
+        }
+
+        return $query;
+    }
+
 
 
 }

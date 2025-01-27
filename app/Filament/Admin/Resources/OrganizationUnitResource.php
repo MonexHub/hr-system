@@ -165,4 +165,27 @@ class OrganizationUnitResource extends Resource
             'units' => $units,
         ]);
     }
+
+    public static function getPermissionPrefixes(): array
+    {
+        return [
+            'view',
+            'view_any',
+            'create',
+            'update',
+            'delete',
+            'delete_any',
+            'manage_hierarchy'
+        ];
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_organization_unit');
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return auth()->user()->can('view_any_organization_unit') ? 'Organization Management' : null;
+    }
 }

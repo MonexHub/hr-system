@@ -65,6 +65,7 @@ class AdminPanelProvider extends PanelProvider
                 Widgets\FilamentInfoWidget::class,
             ])
             ->plugins([
+                \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
 //                FilamentBackgroundsPlugin::make()
 //                    ->imageProvider(
 //                        MyImages::make()

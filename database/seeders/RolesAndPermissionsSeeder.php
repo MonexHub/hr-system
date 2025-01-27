@@ -12,47 +12,78 @@ class RolesAndPermissionsSeeder extends Seeder
     {
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // HR System Permissions
-        $permissions = [
-            'view_employees',
-            'create_employees',
-            'edit_employees',
-            'delete_employees',
-            'view_leave_requests',
-            'approve_leave_requests',
-            'reject_leave_requests',
-            'manage_departments',
-            'view_reports',
-            'manage_roles',
-            'view_payroll',
-            'manage_payroll'
-        ];
+        // Create roles
+        $roles = array(
+            'super_admin',
+            'hr_manager',
+            'department_manager',
+            'employee'
+        );
 
-        foreach ($permissions as $permission) {
-            Permission::create(['name' => $permission]);
+        foreach ($roles as $role) {
+            Role::create(array('name' => $role));
         }
 
-        // Create roles with permissions
-        $roles = [
-            'super_admin' => $permissions,
-            'hr_manager' => [
-                'view_employees', 'create_employees', 'edit_employees',
-                'view_leave_requests', 'approve_leave_requests', 'reject_leave_requests',
-                'manage_departments', 'view_reports', 'view_payroll', 'manage_payroll'
-            ],
-            'department_manager' => [
-                'view_employees',
-                'view_leave_requests', 'approve_leave_requests', 'reject_leave_requests',
-                'view_reports'
-            ],
-            'employee' => [
-                'view_leave_requests'
-            ]
-        ];
+        // Create permissions for each model
+        $models = array(
+            'employee',
+            'department',
+            'leave_request',
+            'leave_type',
+            'organization_unit'
+        );
 
-        foreach ($roles as $role => $rolePermissions) {
-            $roleInstance = Role::create(['name' => $role]);
-            $roleInstance->givePermissionTo($rolePermissions);
+        $actions = array(
+            'view_any',
+            'view',
+            'create',
+            'update',
+            'delete',
+            'delete_any',
+            'import',
+            'export'
+        );
+
+        foreach ($models as $model) {
+            foreach ($actions as $action) {
+                Permission::create(array('name' => $action . '_' . $model));
+            }
         }
+
+        // Assign permissions to roles
+        $superAdmin = Role::findByName('super_admin');
+        $superAdmin->givePermissionTo(Permission::all());
+
+        $hrManager = Role::findByName('hr_manager');
+        $hrManager->givePermissionTo(array(
+            'view_any_employee',
+            'view_employee',
+            'create_employee',
+            'update_employee',
+            'delete_employee',
+            'import_employee',
+            'export_employee',
+            'view_any_department',
+            'view_department',
+            'view_any_leave_request',
+            'view_leave_request',
+            'update_leave_request'
+        ));
+
+        $deptManager = Role::findByName('department_manager');
+        $deptManager->givePermissionTo(array(
+            'view_any_employee',
+            'view_employee',
+            'view_any_leave_request',
+            'view_leave_request',
+            'update_leave_request'
+        ));
+
+        $employee = Role::findByName('employee');
+        $employee->givePermissionTo(array(
+            'view_employee',
+            'view_leave_request',
+            'create_leave_request'
+        ));
     }
 }

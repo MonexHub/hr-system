@@ -139,4 +139,26 @@ class DepartmentResource extends Resource
             'edit' => Pages\EditDepartment::route('/{record}/edit'),
         ];
     }
+
+    public static function getPermissionPrefixes(): array
+    {
+        return [
+            'view',
+            'view_any',
+            'create',
+            'update',
+            'delete',
+            'delete_any',
+        ];
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return auth()->user()->can('view_any_department');
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return auth()->user()->can('view_any_department') ? 'Organization Management' : null;
+    }
 }
