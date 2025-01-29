@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+
 
 class EmployeeEducation extends Model
 {
@@ -12,20 +14,32 @@ class EmployeeEducation extends Model
 
     protected $fillable = [
         'employee_id',
-        'school_name',
+        'institution',
+        'degree',
+        'field_of_study',
         'start_date',
         'end_date',
-        'award_received',
+        'grade',
+        'achievements',
     ];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'start_date' => 'date:Y-m-d',
+        'end_date' => 'date:Y-m-d',
+        'grade' => 'decimal:2',
     ];
 
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    // Ensure end_date is a valid date or null
+    public function setEndDateAttribute($value)
+    {
+        $this->attributes['end_date'] = $value
+            ? Carbon::createFromFormat('Y-m-d', $value)->format('Y-m-d')
+            : null;
     }
 }
 

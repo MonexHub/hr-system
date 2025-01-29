@@ -21,6 +21,7 @@ class Employee extends Model
         'middle_name',
         'last_name',
         'gender',
+        'marital_status',
         'birthdate',
         'profile_photo',
         'phone_number',
@@ -208,4 +209,15 @@ class Employee extends Model
     {
         return "{$this->first_name} {$this->last_name}";
     }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(EmployeeDocument::class);
+    }
+
+    public function financials()
+    {
+        return $this->hasMany(EmployeeFinancial::class);
+    }
+
 }

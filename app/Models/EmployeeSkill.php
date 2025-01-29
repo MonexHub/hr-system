@@ -12,11 +12,43 @@ class EmployeeSkill extends Model
 
     protected $fillable = [
         'employee_id',
+        'skill_name',
+        'proficiency_level',
         'category',
         'description',
-        'competency_level',
-        'experience_qualification',
+        'years_of_experience',
     ];
+
+    /**
+     * The attributes that should be cast.
+     *
+     * @var array
+     */
+    protected $casts = [
+        'proficiency_level' => 'string',
+        'category' => 'string',
+        'years_of_experience' => 'integer',
+    ];
+
+    /**
+     * Get the valid proficiency levels.
+     *
+     * @return array
+     */
+    public static function getProficiencyLevels(): array
+    {
+        return ['beginner', 'intermediate', 'advanced', 'expert'];
+    }
+
+    /**
+     * Get the valid categories.
+     *
+     * @return array
+     */
+    public static function getCategories(): array
+    {
+        return ['technical', 'soft_skills', 'languages', 'other'];
+    }
 
     public function employee()
     {

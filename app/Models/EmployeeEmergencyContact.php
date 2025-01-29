@@ -14,21 +14,14 @@ class EmployeeEmergencyContact extends Model
         'employee_id',
         'name',
         'relationship',
-        'postal_address',
-        'email',
-        'workplace',
         'phone',
-        'mobile',
-        'county_id',
+        'alternative_phone',
+        'email',
+        'address'
     ];
 
-    public function employee()
+    public function employee(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Employee::class);
-    }
-
-    public function county()
-    {
-        return $this->belongsTo(County::class);
     }
 }

@@ -23,6 +23,8 @@ return new class extends Migration
             $table->string('last_name');
             $table->enum('gender', ['male', 'female', 'other']);
             $table->date('birthdate');
+            $table->enum('marital_status', ['single', 'married', 'divorced', 'widowed'])
+                ->nullable();
             $table->string('profile_photo')->nullable();
 
             // Contact Information

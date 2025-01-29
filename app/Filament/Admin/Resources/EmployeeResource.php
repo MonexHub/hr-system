@@ -7,6 +7,12 @@ use App\Filament\Admin\Resources\EmployeeResource\Pages;
 use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\EducationsRelationManager;
 use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\ExperienceRelationManager;
 use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\LeaveRequestsRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\DependentsRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\EducationRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\EmergencyContactsRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
 use App\Filament\Imports\EmployeeImporter;
 use App\Models\Employee;
 use Filament\Forms;
@@ -170,34 +176,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                         ])
                         ->columns(2),
 
-                    // Documents Tab
-                    Forms\Components\Tabs\Tab::make('Documents')
-                        ->icon('heroicon-o-document-text')
-                        ->schema([
-                            Forms\Components\FileUpload::make('cv')
-                                ->label('CV/Resume')
-                                ->acceptedFileTypes(['application/pdf'])
-                                ->directory('employee-documents/cv'),
-
-                            Forms\Components\FileUpload::make('id_proof')
-                                ->label('ID Proof')
-                                ->image()
-                                ->directory('employee-documents/id'),
-
-                            Forms\Components\TextInput::make('nssf_number')
-                                ->label('NSSF Number')
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
-                            Forms\Components\TextInput::make('bank_account')
-                                ->label('Bank Account Number')
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
-                            Forms\Components\TextInput::make('bank_name')
-                                ->label('Bank Name')
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-                        ])
-                        ->columns(2),
-
                     // System Access Tab
                     Forms\Components\Tabs\Tab::make('System Access')
                         ->icon('heroicon-o-key')
@@ -340,26 +318,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
     public static function getRelations(): array
     {
-        $relations = [];
-
-        // Make sure auth is initialized
-        if (!auth()->check()) {
-            return $relations;
-        }
-
-        if (auth()->user()->can('view_any_leave_request')) {
-            $relations[] = LeaveRequestsRelationManager::class;
-        }
-
-        if (auth()->user()->can('view_any_education')) {
-            $relations[] = EducationsRelationManager::class;
-        }
-
-        if (auth()->user()->can('view_any_experience')) {
-            $relations[] = ExperienceRelationManager::class;
-        }
-
-        return $relations;
+        return [
+       DependentsRelationManager::class,
+           EmergencyContactsRelationManager::class,
+        SkillsRelationManager::class,
+           DocumentsRelationManager::class,
+           EducationRelationManager::class,
+           FinancialsRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
@@ -431,4 +397,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     {
         return auth()->user()->can('create_employee');
     }
+
+
 }
