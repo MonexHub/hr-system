@@ -28,6 +28,12 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
+    'beem' => [
+        'api_key' => env('BEEM_API_KEY'),
+        'secret_key' => env('BEEM_SECRET_KEY'),
+        'sender_name' => env('BEEM_SENDER_NAME', 'Company'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

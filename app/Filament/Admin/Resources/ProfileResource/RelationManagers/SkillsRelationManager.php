@@ -1,17 +1,13 @@
 <?php
 
-namespace App\Filament\Employee\Resources\ProfileResource\RelationManagers;
+namespace App\Filament\Admin\Resources\ProfileResource\RelationManagers;
 
 use App\Models\EmployeeSkill;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Forms\Get;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use Filament\Support\Colors\Color;
 
 class SkillsRelationManager extends RelationManager
 {

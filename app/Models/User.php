@@ -55,6 +55,12 @@ class User extends Authenticatable
         return $this->hasOne(Employee::class);
     }
 
+    public function hasCompletedSetup(): bool
+    {
+        return $this->password !== null &&
+            $this->email_verified_at !== null;
+    }
+
 
 
 

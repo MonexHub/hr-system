@@ -31,13 +31,14 @@ class Employee extends Model
         'state',
         'postal_code',
         'department_id',
-        'job_title',
+        'job_title_id',
         'branch',
         'employment_status',
         'appointment_date',
         'contract_type',
         'terms_of_employment',
         'contract_end_date',
+        'net_salary',
         'salary',
         'reporting_to',
     ];
@@ -219,5 +220,12 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeeFinancial::class);
     }
+
+
+    public function jobTitle()
+    {
+        return $this->belongsTo(JobTitle::class);
+    }
+    // In App\Models\Employee
 
 }

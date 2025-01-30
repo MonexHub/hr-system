@@ -1,7 +1,9 @@
 <?php
 
-namespace App\Filament\Employee\Resources;
+namespace App\Filament\Admin\Resources;
 
+use App\Filament\Employee\Resources\ProfileResource\Pages;
+use App\Filament\Employee\Resources\ProfileResource\RelationManagers;
 use App\Models\Employee;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -9,8 +11,6 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use App\Filament\Employee\Resources\ProfileResource\Pages;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers;
 
 class ProfileResource extends Resource
 {
@@ -18,6 +18,7 @@ class ProfileResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'My Profile';
     protected static ?string $navigationGroup = 'Account';
+    protected static ?int $navigationSort = 1;
     protected static ?string $recordTitleAttribute = 'full_name';
 
     public static function getEloquentQuery(): Builder
@@ -220,21 +221,21 @@ class ProfileResource extends Resource
     public static function getRelations(): array
     {
         return [
-            RelationManagers\DependentsRelationManager::class,
-            RelationManagers\EmergencyContactsRelationManager::class,
-            RelationManagers\SkillsRelationManager::class,
-            RelationManagers\DocumentsRelationManager::class,
-            RelationManagers\EducationRelationManager::class,
-            RelationManagers\FinancialsRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\DependentsRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\EmergencyContactsRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\DocumentsRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\EducationRelationManager::class,
+            \App\Filament\Admin\Resources\ProfileResource\RelationManagers\FinancialsRelationManager::class,
         ];
     }
 
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListProfiles::route('/'),
-            'create' => Pages\CreateProfile::route('/create'),
-            'edit' => Pages\EditProfile::route('/{record}/edit'),
+            'index' => \App\Filament\Admin\Resources\ProfileResource\Pages\ListProfiles::route('/'),
+            'create' => \App\Filament\Admin\Resources\ProfileResource\Pages\CreateProfile::route('/create'),
+            'edit' => \App\Filament\Admin\Resources\ProfileResource\Pages\EditProfile::route('/{record}/edit'),
         ];
     }
 

@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Http\Middleware\CheckProfileCompletion;
+use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -35,6 +36,7 @@ class EmployeePanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])->plugins([
+                FilamentShieldPlugin::make(),
 //                    FilamentBackgroundsPlugin::make()
 //                        ->imageProvider(
 //                            MyImages::make()

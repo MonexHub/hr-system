@@ -4,29 +4,31 @@ namespace App\Filament\Admin\Resources;
 
 use App\Filament\Actions\ExportEmployeeProfileAction;
 use App\Filament\Admin\Resources\EmployeeResource\Pages;
-use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\EducationsRelationManager;
-use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\ExperienceRelationManager;
-use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\LeaveRequestsRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\DependentsRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\DocumentsRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\EducationRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\EmergencyContactsRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\DependentsRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\DocumentsRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EducationRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EmergencyContactsRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
+use App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
 use App\Filament\Imports\EmployeeImporter;
+use App\Mail\NewEmployeeAccountSetupMail;
 use App\Models\Employee;
+use App\Services\BeemService;
+use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Actions\ImportAction;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Support\Colors\Color;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
-use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
 
 class EmployeeResource extends Resource implements HasShieldPermissions
 {
@@ -37,182 +39,242 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
     public static function form(Form $form): Form
     {
-        $formSchema = [
-            Forms\Components\Tabs::make('Employee Details')
-                ->tabs([
-                    // Personal Information Tab
-                    Forms\Components\Tabs\Tab::make('Personal Information')
+        return $form
+            ->schema([
+                Forms\Components\Wizard::make([
+                    // Step 1: Personal Information
+                    Forms\Components\Wizard\Step::make('Personal Information')
                         ->icon('heroicon-o-user')
                         ->schema([
-                            Forms\Components\FileUpload::make('profile_photo')
-                                ->image()
-                                ->imageEditor()
-                                ->circleCropper()
-                                ->directory('employee-photos')
-                                ->columnSpanFull(),
+                            Forms\Components\Grid::make()
+                                ->columns(12)
+                                ->schema([
+                                    Forms\Components\Section::make()
+                                        ->schema([
+                                            Forms\Components\FileUpload::make('profile_photo')
+                                                ->image()
+                                                ->imageEditor()
+                                                ->circleCropper()
+                                                ->directory('employee-photos')
+                                        ])
+                                        ->columnSpan(3),
 
-                            Forms\Components\TextInput::make('employee_code')
-                                ->default('EMP-' . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT))
-                                ->disabled()
-                                ->dehydrated()
-                                ->required(),
+                                    Forms\Components\Section::make()
+                                        ->schema([
+                                            Forms\Components\TextInput::make('employee_code')
+                                                ->default('EMP-' . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT))
+                                                ->disabled()
+                                                ->dehydrated()
+                                                ->required(),
 
-                            Forms\Components\TextInput::make('first_name')
-                                ->required()
-                                ->maxLength(255),
+                                            Forms\Components\TextInput::make('first_name')
+                                                ->required()
+                                                ->maxLength(255),
 
-                            Forms\Components\TextInput::make('middle_name')
-                                ->maxLength(255),
+                                            Forms\Components\TextInput::make('middle_name')
+                                                ->maxLength(255),
 
-                            Forms\Components\TextInput::make('last_name')
-                                ->required()
-                                ->maxLength(255),
+                                            Forms\Components\TextInput::make('last_name')
+                                                ->required()
+                                                ->maxLength(255),
 
-                            Forms\Components\Select::make('gender')
-                                ->options([
-                                    'male' => 'Male',
-                                    'female' => 'Female',
-                                    'other' => 'Other',
+                                            Forms\Components\Select::make('gender')
+                                                ->options([
+                                                    'male' => 'Male',
+                                                    'female' => 'Female',
+                                                    'other' => 'Other',
+                                                ])
+                                                ->searchable()
+                                                ->preload()
+                                                ->required(),
+
+                                            Forms\Components\DatePicker::make('birthdate')
+                                                ->required()
+                                                ->maxDate(now()->subYears(18))
+                                                ->displayFormat('d/m/Y'),
+
+                                            Forms\Components\Select::make('marital_status')
+                                                ->options([
+                                                    'single' => 'Single',
+                                                    'married' => 'Married',
+                                                    'divorced' => 'Divorced',
+                                                    'widowed' => 'Widowed',
+                                                ])
+                                                ->searchable()
+                                                ->preload()
+                                        ])
+                                        ->columns(2)
+                                        ->columnSpan(9)
                                 ])
-                                ->required(),
+                        ])->columnSpanFull(12),
 
-                            Forms\Components\DatePicker::make('birthdate')
-                                ->required()
-                                ->maxDate(now()->subYears(18))
-                                ->displayFormat('d/m/Y'),
-
-                            Forms\Components\Select::make('marital_status')
-                                ->options([
-                                    'single' => 'Single',
-                                    'married' => 'Married',
-                                    'divorced' => 'Divorced',
-                                    'widowed' => 'Widowed',
-                                ]),
-                        ])
-                        ->columns(2),
-
-                    // Employment Details Tab
-                    Forms\Components\Tabs\Tab::make('Employment Details')
+                    // Step 2: Employment Details
+                    Forms\Components\Wizard\Step::make('Employment Details')
                         ->icon('heroicon-o-briefcase')
                         ->schema([
-                            Forms\Components\Select::make('department_id')
-                                ->relationship('department', 'name')
-                                ->required()
-                                ->searchable()
-                                ->visible(fn() => auth()->user()->can('view_any_department')),
+                            Forms\Components\Section::make()
+                                ->schema([
+                                    Forms\Components\Select::make('department_id')
+                                        ->relationship('department', 'name')
+                                        ->required()
+                                        ->searchable()
+                                        ->visible(fn() => auth()->user()->can('view_any_department')),
 
-                            Forms\Components\Select::make('reporting_to')
-                                ->relationship('reportingTo', 'first_name', function ($query) {
-                                    return $query->whereNotNull('appointment_date');
-                                })
-                                ->getOptionLabelFromRecordUsing(fn($record) => $record->full_name)
-                                ->searchable(),
+                                    Forms\Components\Select::make('reporting_to')
+                                        ->relationship('reportingTo', 'first_name', function ($query) {
+                                            return $query->whereNotNull('appointment_date');
+                                        })
+                                        ->getOptionLabelFromRecordUsing(fn($record) => $record->full_name)
+                                        ->searchable(),
 
-                            Forms\Components\TextInput::make('job_title')
-                                ->required()
-                                ->maxLength(255),
+                                    Forms\Components\Select::make('job_title_id')
+                                        ->label('Job Title')
+                                        ->relationship('jobTitle', 'name')
+                                        ->required()
+                                        ->searchable()
+                                        ->preload()
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, callable $set) {
+                                            if ($state) {
+                                                $jobTitle = \App\Models\JobTitle::find($state);
+                                                if ($jobTitle) {
+                                                    $set('net_salary', $jobTitle->net_salary_min);
+                                                }
+                                            }
+                                        }),
 
-                            Forms\Components\Select::make('employment_status')
-                                ->options([
-                                    'active' => 'Active',
-                                    'probation' => 'Probation',
-                                    'suspended' => 'Suspended',
-                                    'terminated' => 'Terminated',
-                                    'resigned' => 'Resigned',
+                                    Forms\Components\TextInput::make('net_salary')
+                                        ->label('Net Salary')
+                                        ->numeric()
+                                        ->prefix('TZS')
+                                        ->required()
+                                        ->minValue(function (callable $get) {
+                                            $jobTitleId = $get('job_title_id');
+                                            if ($jobTitleId) {
+                                                $jobTitle = \App\Models\JobTitle::find($jobTitleId);
+                                                return $jobTitle?->net_salary_min ?? 0;
+                                            }
+                                            return 0;
+                                        })
+                                        ->maxValue(function (callable $get) {
+                                            $jobTitleId = $get('job_title_id');
+                                            if ($jobTitleId) {
+                                                $jobTitle = \App\Models\JobTitle::find($jobTitleId);
+                                                return $jobTitle?->net_salary_max ?? PHP_FLOAT_MAX;
+                                            }
+                                            return PHP_FLOAT_MAX;
+                                        })
+                                        ->hint(function (callable $get) {
+                                            $jobTitleId = $get('job_title_id');
+                                            if ($jobTitleId) {
+                                                $jobTitle = \App\Models\JobTitle::find($jobTitleId);
+                                                if ($jobTitle) {
+                                                    return "Salary range: " . $jobTitle->net_salary_range;
+                                                }
+                                            }
+                                            return null;
+                                        })
+                                        ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+
+                                    Forms\Components\Select::make('employment_status')
+                                        ->options([
+                                            'active' => 'Active',
+                                            'probation' => 'Probation',
+                                            'suspended' => 'Suspended',
+                                            'terminated' => 'Terminated',
+                                            'resigned' => 'Resigned',
+                                        ])
+                                        ->required()
+                                        ->searchable()
+                                        ->preload()
+                                        ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+
+                                    Forms\Components\Select::make('contract_type')
+                                        ->options([
+                                            'permanent' => 'Permanent',
+                                            'contract' => 'Contract',
+                                            'probation' => 'Probation',
+                                            'intern' => 'Intern',
+                                        ])
+                                        ->required()
+                                        ->reactive()
+                                        ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+
+                                    Forms\Components\DatePicker::make('appointment_date')
+                                        ->required()
+                                        ->displayFormat('d/m/Y')
+                                        ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+
+                                    Forms\Components\DatePicker::make('contract_end_date')
+                                        ->displayFormat('d/m/Y')
+                                        ->visible(fn(callable $get) =>
+                                            $get('contract_type') !== 'permanent' &&
+                                            auth()->user()->hasRole(['super_admin', 'hr_manager'])
+                                        ),
                                 ])
-                                ->required()
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                                ->columns(2)
+                        ]),
 
-                            Forms\Components\Select::make('contract_type')
-                                ->options([
-                                    'permanent' => 'Permanent',
-                                    'contract' => 'Contract',
-                                    'probation' => 'Probation',
-                                    'intern' => 'Intern',
-                                ])
-                                ->required()
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
-                            Forms\Components\DatePicker::make('appointment_date')
-                                ->required()
-                                ->displayFormat('d/m/Y')
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
-                            Forms\Components\DatePicker::make('contract_end_date')
-                                ->displayFormat('d/m/Y')
-                                ->visible(fn(callable $get) => $get('contract_type') !== 'permanent' &&
-                                    auth()->user()->hasRole(['super_admin', 'hr_manager'])
-                                ),
-
-                            Forms\Components\TextInput::make('salary')
-                                ->numeric()
-                                ->prefix('TSh')
-                                ->required()
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-                        ])
-                        ->columns(2),
-
-                    // Contact Information Tab
-                    Forms\Components\Tabs\Tab::make('Contact Information')
+                    // Step 3: Contact Information
+                    Forms\Components\Wizard\Step::make('Contact Information')
                         ->icon('heroicon-o-phone')
                         ->schema([
-                            Forms\Components\TextInput::make('phone_number')
-                                ->tel()
-                                ->required(),
-                            Forms\Components\TextInput::make('email')
-                                ->email()
-                                ->required()
-                                ->unique(ignoreRecord: true),
-                            Forms\Components\TextInput::make('permanent_address')
-                                ->required(),
-                            Forms\Components\TextInput::make('city')
-                                ->required(),
-                            Forms\Components\TextInput::make('state')
-                                ->required(),
-                            Forms\Components\TextInput::make('postal_code'),
-                            Forms\Components\TextInput::make('emergency_contact_name'),
-                            Forms\Components\TextInput::make('emergency_contact_phone')
-                                ->tel(),
-                        ])
-                        ->columns(2),
+                            Forms\Components\Grid::make()
+                                ->columns(2)
+                                ->schema([
+                                    Forms\Components\TextInput::make('phone_number')
+                                        ->tel()
+                                        ->prefix('255')
+                                        ->required(),
 
-                    // System Access Tab
-                    Forms\Components\Tabs\Tab::make('System Access')
+                                    Forms\Components\TextInput::make('email')
+                                        ->email()
+                                        ->required()
+                                        ->unique(ignoreRecord: true),
+
+                                    Forms\Components\TextInput::make('permanent_address')
+                                        ->required(),
+
+                                    Forms\Components\TextInput::make('city')
+                                        ->required(),
+                                    Forms\Components\TextInput::make('postal_code'),
+
+                                    Forms\Components\TextInput::make('emergency_contact_name'),
+
+                                    Forms\Components\TextInput::make('emergency_contact_phone')
+                                        ->tel(),
+                                ])
+                        ]),
+
+                    // Step 4: System Access
+                    Forms\Components\Wizard\Step::make('System Access')
                         ->icon('heroicon-o-key')
                         ->schema([
-                            Forms\Components\Toggle::make('create_user_account')
-                                ->label('Create User Account?')
-                                ->default(true)
-                                ->reactive()
-                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
-                            Forms\Components\TextInput::make('password')
-                                ->password()
-                                ->dehydrated(fn($state) => filled($state))
-                                ->required(fn(callable $get) => $get('create_user_account'))
-                                ->visible(fn(callable $get) => $get('create_user_account') &&
-                                    auth()->user()->hasRole(['super_admin', 'hr_manager'])
-                                ),
-
-                            Forms\Components\Select::make('roles')
-                                ->multiple()
-                                ->options(function () {
-                                    if (auth()->user()->hasRole('super_admin')) {
-                                        return Role::all()->pluck('name', 'name');
-                                    }
-                                    return Role::whereNotIn('name', ['super_admin'])->pluck('name', 'name');
-                                })
-                                ->preload()
-                                ->visible(fn(callable $get) => $get('create_user_account') &&
-                                    auth()->user()->hasRole(['super_admin', 'hr_manager'])
-                                ),
+                            Forms\Components\Grid::make()
+                                ->columns(2)
+                                ->schema([
+                                    Forms\Components\Section::make()
+                                        ->schema([
+                                            Forms\Components\Select::make('roles')
+                                                ->multiple()
+                                                ->label('Assign Roles')
+                                                ->options(function () {
+                                                    if (auth()->user()->hasRole('super_admin')) {
+                                                        return Role::all()->pluck('name', 'name');
+                                                    }
+                                                    return Role::whereNotIn('name', ['super_admin'])->pluck('name', 'name');
+                                                })
+                                                ->required()
+                                                ->preload()
+                                                ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager']))
+                                        ])
+                                        ->columns(1)
+                                ])
                         ])
-                        ->columns(2),
                 ])
-                ->columnSpanFull(),
-        ];
-
-        return $form->schema($formSchema);
+                    ->skippable()
+                ->columnSpanFull()
+            ]);
     }
 
     public static function table(Table $table): Table
@@ -244,12 +306,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
                 Tables\Columns\TextColumn::make('employment_status')
                     ->badge()
+                    ->formatStateUsing(fn(string $state): string => ucfirst(strtolower($state)))
                     ->color(fn(string $state): string => match ($state) {
-                        'active' => 'success',
-                        'probation' => 'warning',
-                        'suspended' => 'danger',
-                        'terminated' => 'danger',
-                        'resigned' => 'gray',
+                        'ACTIVE' => 'success',
+                        'PROBATION' => 'warning',
+                        'SUSPENDED', 'TERMINATED' => 'danger',
                         default => 'gray',
                     })
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
@@ -266,6 +327,17 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->date('d/m/Y')
                     ->sortable()
                     ->toggleable()
+                    ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+
+                Tables\Columns\IconColumn::make('account_setup')
+                    ->label('Account Setup')
+                    ->boolean()
+                    ->getStateUsing(fn ($record) => $record->user?->password !== null)
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-clock')
+                    ->trueColor('success')
+                    ->falseColor('warning')
+                    ->alignCenter()
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
             ])
             ->filters([
@@ -290,13 +362,98 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                         'probation' => 'Probation',
                         'intern' => 'Intern',
                     ])
-                    ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                    ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager']))
+                ,
             ])
             ->actions([
+
                 Tables\Actions\ViewAction::make()
                     ->visible(fn(Employee $record) => auth()->user()->can('view', $record)),
+
                 Tables\Actions\EditAction::make()
                     ->visible(fn(Employee $record) => auth()->user()->can('update', $record)),
+                Tables\Actions\Action::make('resend_setup')
+                    ->label('Resend Setup Link')
+                    ->icon('heroicon-o-envelope')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend Account Setup Link')
+                    ->modalDescription('Are you sure you want to resend the account setup link? This will invalidate any previous setup links.')
+                    ->modalSubmitActionLabel('Yes, resend link')
+                    ->successNotification(
+                        Notification::make()
+                            ->success()
+                            ->title('Setup Instructions Sent')
+                            ->body('Account setup instructions have been sent via email and SMS.')
+                    )
+                    ->failureNotification(
+                        Notification::make()
+                            ->danger()
+                            ->title('Error')
+                            ->body('Failed to send setup instructions. Please try again.')
+                    )
+                    ->action(function ($record) {
+                        try {
+                            // Generate new token
+                            $token = Str::random(64);
+
+                            // Store new token in cache
+                            Cache::put(
+                                'account_setup_' . $record->id,
+                                $token,
+                                now()->addHours(48)
+                            );
+
+                            $setupUrl = route('employee.setup-account', [
+                                'token' => $token,
+                                'email' => $record->email,
+                            ]);
+
+                            // Send email
+                            Mail::to($record->email)->send(
+                                new NewEmployeeAccountSetupMail($record, $token)
+                            );
+
+                            // Send SMS if phone number exists
+                            if ($record->phone_number) {
+                                $beemService = new BeemService();
+
+                                $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
+
+                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                                if (!$result['success']) {
+                                    \Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                        'error' => $result['error'] ?? 'Unknown error'
+                                    ]);
+                                }
+                            }
+
+                            return true;
+                        } catch (\Exception $e) {
+                            \Log::error('Failed to send setup instructions', [
+                                'employee_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
+
+                            throw $e;
+                        }
+                    })
+                    // Updated visibility condition
+                    ->visible(function (Employee $record) {
+                        // Check if user has admin/HR role
+                        $hasPermission = auth()->user()->hasRole(['super_admin', 'hr_manager']);
+
+                        // Check if user exists but hasn't set up their account
+                        $needsSetup = $record->user &&
+                            (
+                                !$record->user->password ||
+                                $record->user->password === Hash::make(Str::random(16)) ||
+                                !$record->user->email_verified_at
+                            );
+
+                        return $hasPermission && $needsSetup;
+                    }),
                 ExportEmployeeProfileAction::make()
                     ->visible(fn() => auth()->user()->can('export_employee')),
             ])
@@ -316,12 +473,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
             ]);
     }
 
+
+
     public static function getRelations(): array
     {
         return [
        DependentsRelationManager::class,
            EmergencyContactsRelationManager::class,
-        SkillsRelationManager::class,
+            SkillsRelationManager::class,
            DocumentsRelationManager::class,
            EducationRelationManager::class,
            FinancialsRelationManager::class,
@@ -396,6 +555,19 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     public static function canCreate(): bool
     {
         return auth()->user()->can('create_employee');
+    }
+
+
+    public static function afterCreate(Model $record): void
+    {
+        // Generate a random token for account setup
+        $token = Str::random(64);
+
+        // Store the token in cache with expiry (e.g., 48 hours)
+        Cache::put('account_setup_' . $record->id, $token, now()->addHours(48));
+
+        // Send email to employee
+        Mail::to($record->email)->send(new NewEmployeeAccountSetupMail($record, $token));
     }
 
 

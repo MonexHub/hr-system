@@ -8,11 +8,14 @@ use App\Models\Department;
 use App\Models\OrganizationUnit;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class UserEmployeeSeeder extends Seeder
 {
     public function run()
     {
+        $this->ensureRolesExist();
+
         $hrDepartment = Department::where('name', 'Human Resources')->first();
         $hrUnit = OrganizationUnit::where('name', 'Human Resources')->first();
         $itDepartment = Department::where('name', 'Software Development')->first();
@@ -66,41 +69,57 @@ class UserEmployeeSeeder extends Seeder
 
     private function createUserAndEmployee($name, $email, $role, $department, $unit, $jobTitle, $reportingTo = null)
     {
-        $user = User::create(array(
-            'name' => $name,
-            'email' => $email,
-            'password' => Hash::make('password123')
-        ));
+        // Check if user exists
+        $user = User::updateOrCreate(
+            ['email' => $email],
+            [
+                'name' => $name,
+                'password' => Hash::make('password123')
+            ]
+        );
 
-        $user->assignRole($role);
+        // Ensure role exists and assign
+        if (!$user->hasRole($role)) {
+            $user->assignRole($role);
+        }
 
         $nameParts = explode(' ', $name);
-        $employee = Employee::create(array(
-            'user_id' => $user->id,
-            'employee_code' => 'EMP' . str_pad(Employee::count() + 1, 3, '0', STR_PAD_LEFT),
-            'first_name' => $nameParts[0],
-            'last_name' => isset($nameParts[1]) ? $nameParts[1] : '',
-            'gender' => 'male',
-            'birthdate' => '1990-01-01',
-            'phone_number' => '+255742' . str_pad(Employee::count() + 1, 6, '0', STR_PAD_LEFT),
-            'email' => $email,
-            'permanent_address' => 'Dar es Salaam',
-            'city' => 'Dar es Salaam',
-            'state' => 'Dar es Salaam',
-            'postal_code' => '12345',
-            'job_title' => $jobTitle,
-            'department_id' => $department ? $department->id : null,
-            'unit_id' => $unit ? $unit->id : null,
-            'salary' => $this->getSalaryByRole($role),
-            'employment_status' => 'active',
-            'application_status' => 'active',
-            'contract_type' => 'permanent',
-            'appointment_date' => now(),
-            'reporting_to' => $reportingTo
-        ));
+
+        // Create or update employee
+        $employee = Employee::updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'employee_code' => $this->generateEmployeeCode(),
+                'first_name' => $nameParts[0],
+                'last_name' => isset($nameParts[1]) ? $nameParts[1] : '',
+                'gender' => 'male',
+                'birthdate' => '1990-01-01',
+                'phone_number' => '+255742' . str_pad(Employee::count() + 1, 6, '0', STR_PAD_LEFT),
+                'email' => $email,
+                'permanent_address' => 'Dar es Salaam',
+                'city' => 'Dar es Salaam',
+                'state' => 'Dar es Salaam',
+                'postal_code' => '12345',
+                'job_title' => $jobTitle,
+                'department_id' => $department ? $department->id : null,
+                'unit_id' => $unit ? $unit->id : null, // Changed from organization_unit_id to unit_id
+                'net_salary' => $this->getSalaryByRole($role),
+                'employment_status' => 'active',
+                'contract_type' => 'permanent',
+                'appointment_date' => now(),
+                'reporting_to' => $reportingTo
+            ]
+        );
 
         $user->employee = $employee;
         return $user;
+    }
+
+    private function generateEmployeeCode()
+    {
+        $prefix = 'EMP';
+        $count = Employee::count() + 1;
+        return $prefix . str_pad($count, 3, '0', STR_PAD_LEFT);
     }
 
     private function getSalaryByRole($role)
@@ -117,13 +136,29 @@ class UserEmployeeSeeder extends Seeder
     {
         foreach ($departments as $department) {
             if ($department) {
-                $department->update(array('current_headcount' => $department->employees()->count()));
+                $department->update([
+                    'current_headcount' => $department->employees()->count()
+                ]);
             }
         }
 
         foreach ($units as $unit) {
             if ($unit) {
-                $unit->update(array('current_headcount' => $unit->employees()->count()));
+                $unit->update([
+                    'current_headcount' => $unit->employees()->count()
+                ]);
+            }
+        }
+    }
+
+    private function ensureRolesExist()
+    {
+        $roles = ['super_admin', 'hr_manager', 'department_manager', 'employee'];
+
+        foreach ($roles as $role) {
+            if (!Role::where('name', $role)->exists()) {
+                $this->command->warn("Role {$role} does not exist. Make sure to run ShieldSeeder first.");
+                throw new \Exception("Required role {$role} does not exist. Please run 'php artisan db:seed --class=ShieldSeeder' first.");
             }
         }
     }
