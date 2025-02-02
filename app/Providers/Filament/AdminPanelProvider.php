@@ -35,7 +35,7 @@ class AdminPanelProvider extends PanelProvider
             ->passwordReset()
             ->emailVerification()
             ->colors([
-                'primary' => Color::Indigo,
+                'primary' => Color::Green,
                 'secondary' => Color::Gray,
                 'success' => Color::Green,
                 'warning' => Color::Amber,
@@ -81,7 +81,12 @@ class AdminPanelProvider extends PanelProvider
                     ->resourceCheckboxListColumns([
                         'default' => 1,
                         'sm' => 2,
-                    ])
+                    ]),
+                FilamentBackgroundsPlugin::make()
+                    ->imageProvider(
+                        MyImages::make()
+                            ->directory('images/backgrounds')
+                    ),
            ])
             // Middleware
             ->middleware([

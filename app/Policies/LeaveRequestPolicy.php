@@ -15,7 +15,7 @@ class LeaveRequestPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->can('view_any_employee::leave::request');
+        return $user->can('view_any_leave::request');
     }
 
     /**
@@ -23,7 +23,7 @@ class LeaveRequestPolicy
      */
     public function view(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('view_employee::leave::request');
+        return $user->can('view_leave::request');
     }
 
     /**
@@ -31,7 +31,7 @@ class LeaveRequestPolicy
      */
     public function create(User $user): bool
     {
-        return $user->can('create_employee::leave::request');
+        return $user->can('create_leave::request');
     }
 
     /**
@@ -39,7 +39,7 @@ class LeaveRequestPolicy
      */
     public function update(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('update_employee::leave::request');
+        return $user->can('update_leave::request');
     }
 
     /**
@@ -47,7 +47,7 @@ class LeaveRequestPolicy
      */
     public function delete(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('delete_employee::leave::request');
+        return $user->can('delete_leave::request');
     }
 
     /**
@@ -55,7 +55,7 @@ class LeaveRequestPolicy
      */
     public function deleteAny(User $user): bool
     {
-        return $user->can('delete_any_employee::leave::request');
+        return $user->can('delete_any_leave::request');
     }
 
     /**
@@ -63,7 +63,7 @@ class LeaveRequestPolicy
      */
     public function forceDelete(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('force_delete_employee::leave::request');
+        return $user->can('force_delete_leave::request');
     }
 
     /**
@@ -71,7 +71,7 @@ class LeaveRequestPolicy
      */
     public function forceDeleteAny(User $user): bool
     {
-        return $user->can('force_delete_any_employee::leave::request');
+        return $user->can('force_delete_any_leave::request');
     }
 
     /**
@@ -79,7 +79,7 @@ class LeaveRequestPolicy
      */
     public function restore(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('restore_employee::leave::request');
+        return $user->can('restore_leave::request');
     }
 
     /**
@@ -87,7 +87,7 @@ class LeaveRequestPolicy
      */
     public function restoreAny(User $user): bool
     {
-        return $user->can('restore_any_employee::leave::request');
+        return $user->can('restore_any_leave::request');
     }
 
     /**
@@ -95,7 +95,7 @@ class LeaveRequestPolicy
      */
     public function replicate(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $user->can('replicate_employee::leave::request');
+        return $user->can('replicate_leave::request');
     }
 
     /**
@@ -103,6 +103,6 @@ class LeaveRequestPolicy
      */
     public function reorder(User $user): bool
     {
-        return $user->can('reorder_employee::leave::request');
+        return $user->can('reorder_leave::request');
     }
 }

@@ -23,8 +23,8 @@ class UserEmployeeSeeder extends Seeder
 
         // Create Super Admin
         $admin = $this->createUserAndEmployee(
-            'Admin User',
-            'admin@monex.co.tz',
+            'John Doe',
+            'john.doe@monex.co.tz',
             'super_admin',
             $hrDepartment,
             $hrUnit,
@@ -33,8 +33,8 @@ class UserEmployeeSeeder extends Seeder
 
         // Create HR Manager
         $hrManager = $this->createUserAndEmployee(
-            'Edgar Aidan',
-            'edgar@monex.co.tz',
+            'Jane Smith',
+            'jane.smith@monex.co.tz',
             'hr_manager',
             $hrDepartment,
             $hrUnit,
@@ -44,8 +44,8 @@ class UserEmployeeSeeder extends Seeder
 
         // Create IT Manager
         $itManager = $this->createUserAndEmployee(
-            'James Kanga',
-            'james@monex.co.tz',
+            'Mike Johnson',
+            'mike.johnson@monex.co.tz',
             'department_manager',
             $itDepartment,
             $itUnit,
@@ -55,8 +55,8 @@ class UserEmployeeSeeder extends Seeder
 
         // Create Developer
         $this->createUserAndEmployee(
-            'David John',
-            'david@monex.co.tz',
+            'Alice Brown',
+            'alice.brown@monex.co.tz',
             'employee',
             $itDepartment,
             $itUnit,
@@ -151,7 +151,7 @@ class UserEmployeeSeeder extends Seeder
         }
     }
 
-    private function ensureRolesExist()
+    private function ensureRolesExist(): void
     {
         $roles = ['super_admin', 'hr_manager', 'department_manager', 'employee'];
 

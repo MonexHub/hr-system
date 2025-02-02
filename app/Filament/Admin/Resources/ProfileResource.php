@@ -2,8 +2,7 @@
 
 namespace App\Filament\Admin\Resources;
 
-use App\Filament\Employee\Resources\ProfileResource\Pages;
-use App\Filament\Employee\Resources\ProfileResource\RelationManagers;
+
 use App\Models\Employee;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -17,9 +16,9 @@ class ProfileResource extends Resource
     protected static ?string $model = Employee::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'My Profile';
-    protected static ?string $navigationGroup = 'Account';
+    protected static ?string $navigationGroup = 'Account Settings';
     protected static ?int $navigationSort = 1;
-    protected static ?string $recordTitleAttribute = 'full_name';
+    protected static bool $shouldRegisterNavigation = true;
 
     public static function getEloquentQuery(): Builder
     {
@@ -27,143 +26,145 @@ class ProfileResource extends Resource
             ->where('id', auth()->user()->employee?->id);
     }
 
+
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                static::getProfilePhotoSection(),
-                static::getProfileDetailsTabs(),
-            ]);
-    }
+                Forms\Components\Tabs::make('Profile')
+                    ->tabs([
+                        // Tab 1: Basic Information
+                        Forms\Components\Tabs\Tab::make('Basic Information')
+                            ->icon('heroicon-o-user')
+                            ->schema([
+                                Forms\Components\Grid::make()
+                                    ->columns(12)
+                                    ->schema([
+                                        Forms\Components\Section::make()
+                                            ->schema([
+                                                Forms\Components\FileUpload::make('profile_photo')
+                                                    ->image()
+                                                    ->imageEditor()
+                                                    ->circleCropper()
+                                                    ->directory('employee-photos')
+                                            ])
+                                            ->columnSpan(3),
 
-    protected static function getProfilePhotoSection(): Forms\Components\Section
-    {
-        return Forms\Components\Section::make('Profile Photo')
-            ->schema([
-                Forms\Components\FileUpload::make('profile_photo')
-                    ->avatar()
-                    ->imageEditor()
-                    ->circleCropper()
-                    ->directory('employee-photos')
-                    ->imagePreviewHeight('150px')
-                    ->alignCenter()
-            ])
-            ->collapsible()
-            ->columns(1);
-    }
+                                        Forms\Components\Section::make()
+                                            ->schema([
+                                                Forms\Components\TextInput::make('employee_code')
+                                                    ->disabled()
+                                                    ->dehydrated(),
 
-    protected static function getProfileDetailsTabs(): Forms\Components\Tabs
-    {
-        return Forms\Components\Tabs::make('Profile Details')
-            ->tabs([
-                static::getPersonalInformationTab(),
-                static::getContactDetailsTab(),
-            ])
-            ->columnSpanFull()
-            ->persistTabInQueryString();
-    }
+                                                Forms\Components\TextInput::make('first_name')
+                                                    ->required()
+                                                    ->maxLength(255),
 
-    protected static function getPersonalInformationTab(): Forms\Components\Tabs\Tab
-    {
-        return Forms\Components\Tabs\Tab::make('Personal Information')
-            ->icon('heroicon-o-user')
-            ->schema([
-                static::getBasicInfoFields(),
-                static::getPersonalDetailsFields(),
-            ]);
-    }
+                                                Forms\Components\TextInput::make('middle_name')
+                                                    ->maxLength(255),
 
-    protected static function getBasicInfoFields(): Forms\Components\Grid
-    {
-        return Forms\Components\Grid::make(3)
-            ->schema([
-                Forms\Components\TextInput::make('employee_code')
-                    ->label('Employee ID')
-                    ->disabled()
-                    ->prefixIcon('heroicon-o-identification')
-                    ->columnSpan(1),
+                                                Forms\Components\TextInput::make('last_name')
+                                                    ->required()
+                                                    ->maxLength(255),
 
-                Forms\Components\TextInput::make('first_name')
-                    ->required()
-                    ->prefixIcon('heroicon-o-user')
-                    ->columnSpan(1),
+                                                Forms\Components\Select::make('gender')
+                                                    ->options([
+                                                        'male' => 'Male',
+                                                        'female' => 'Female',
+                                                        'other' => 'Other',
+                                                    ])
+                                                    ->required(),
 
-                Forms\Components\TextInput::make('last_name')
-                    ->required()
-                    ->prefixIcon('heroicon-o-user')
-                    ->columnSpan(1),
-            ]);
-    }
+                                                Forms\Components\DatePicker::make('birthdate')
+                                                    ->required()
+                                                    ->displayFormat('d/m/Y')
+                                                    ->disabled(),
 
-    protected static function getPersonalDetailsFields(): Forms\Components\Grid
-    {
-        return Forms\Components\Grid::make(2)
-            ->schema([
-                Forms\Components\DatePicker::make('birthdate')
-                    ->displayFormat('d M Y')
-                    ->prefixIcon('heroicon-o-cake')
-                    ->columnSpan(1),
+                                                Forms\Components\Select::make('marital_status')
+                                                    ->options([
+                                                        'single' => 'Single',
+                                                        'married' => 'Married',
+                                                        'divorced' => 'Divorced',
+                                                        'widowed' => 'Widowed',
+                                                    ])
+                                                    ->required(),
+                                            ])
+                                            ->columns(2)
+                                            ->columnSpan(9)
+                                    ]),
+                            ]),
 
-                Forms\Components\Select::make('marital_status')
-                    ->options([
-                        'single' => 'Single',
-                        'married' => 'Married',
-                        'divorced' => 'Divorced',
-                        'widowed' => 'Widowed',
+                        // Tab 2: Contact Information
+                        Forms\Components\Tabs\Tab::make('Contact Information')
+                            ->icon('heroicon-o-phone')
+                            ->schema([
+                                Forms\Components\Section::make()
+                                    ->schema([
+                                        Forms\Components\TextInput::make('phone_number')
+                                            ->tel()
+                                            ->required(),
+
+                                        Forms\Components\TextInput::make('email')
+                                            ->email()
+                                            ->required()
+                                            ->unique(ignoreRecord: true),
+
+                                        Forms\Components\TextInput::make('permanent_address')
+                                            ->required(),
+
+                                        Forms\Components\TextInput::make('city')
+                                            ->required(),
+
+                                        Forms\Components\TextInput::make('postal_code'),
+                                    ])
+                                    ->columns(2),
+                            ]),
+
+                        // Tab 3: Employment Details
+                        Forms\Components\Tabs\Tab::make('Employment Details')
+                            ->icon('heroicon-o-briefcase')
+                            ->schema([
+                                Forms\Components\Section::make()
+                                    ->schema([
+                                        Forms\Components\TextInput::make('department.name')
+                                            ->disabled(),
+
+                                        Forms\Components\TextInput::make('jobTitle.name')
+                                            ->label('Job Title')
+                                            ->disabled(),
+
+                                        Forms\Components\DatePicker::make('appointment_date')
+                                            ->label('Date Joined')
+                                            ->disabled()
+                                            ->date('d/m/Y'),
+
+                                        Forms\Components\TextInput::make('employment_status')
+                                            ->disabled(),
+
+                                        Forms\Components\TextInput::make('contract_type')
+                                            ->disabled(),
+
+                                        Forms\Components\DatePicker::make('contract_end_date')
+                                            ->date('d/m/Y')
+                                            ->disabled()
+                                            ->visible(fn (Employee $record) =>
+                                                $record->contract_type !== 'permanent'),
+                                    ])
+                                    ->columns(3),
+                            ]),
+
+                        // Tab 4: Skills & Qualifications
+                        Forms\Components\Tabs\Tab::make('Skills & Qualifications')
+                            ->icon('heroicon-o-academic-cap')
+                            ->schema([
+                                Forms\Components\Placeholder::make('skills_note')
+                                    ->content('Skills and qualifications can be managed in their respective sections below.')
+                            ]),
                     ])
-                    ->native(false)
-                    ->prefixIcon('heroicon-o-heart')
-                    ->columnSpan(1),
-            ]);
-    }
-
-    protected static function getContactDetailsTab(): Forms\Components\Tabs\Tab
-    {
-        return Forms\Components\Tabs\Tab::make('Contact Details')
-            ->icon('heroicon-o-phone')
-            ->schema([
-                static::getContactFields(),
-                static::getAddressFields(),
-            ]);
-    }
-
-    protected static function getContactFields(): Forms\Components\Grid
-    {
-        return Forms\Components\Grid::make(2)
-            ->schema([
-                Forms\Components\TextInput::make('phone_number')
-                    ->tel()
-                    ->required()
-                    ->prefixIcon('heroicon-o-device-phone-mobile'),
-
-                Forms\Components\TextInput::make('email')
-                    ->email()
-                    ->required()
-                    ->prefixIcon('heroicon-o-envelope'),
-            ]);
-    }
-
-    protected static function getAddressFields(): Forms\Components\Fieldset
-    {
-        return Forms\Components\Fieldset::make('Address Information')
-            ->columns(2)
-            ->schema([
-                Forms\Components\TextInput::make('permanent_address')
                     ->columnSpanFull()
-                    ->prefixIcon('heroicon-o-map-pin'),
-
-                Forms\Components\TextInput::make('city')
-                    ->required()
-                    ->prefixIcon('heroicon-o-building-office'),
-
-                Forms\Components\TextInput::make('state')
-                    ->required()
-                    ->prefixIcon('heroicon-o-flag'),
-
-                Forms\Components\TextInput::make('postal_code')
-                    ->prefixIcon('heroicon-o-tag'),
             ]);
     }
+
 
     public static function table(Table $table): Table
     {
@@ -247,5 +248,17 @@ class ProfileResource extends Resource
     public static function canDelete($record): bool
     {
         return false;
+    }
+
+
+
+    public static function canDeleteAny(): bool
+    {
+        return false; // Disable bulk deletion
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        return null; // No badge needed for profile
     }
 }

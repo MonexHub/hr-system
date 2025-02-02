@@ -226,6 +226,10 @@ class Employee extends Model
     {
         return $this->belongsTo(JobTitle::class);
     }
-    // In App\Models\Employee
+
+    public function unit()
+    {
+        return $this->belongsTo(OrganizationUnit::class, 'unit_id');
+    }
 
 }

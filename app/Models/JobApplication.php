@@ -5,33 +5,42 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class JobApplication extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
-        'application_number',
         'job_posting_id',
-        'candidate_id',
-        'status',
+        'first_name',
+        'last_name',
+        'email',
+        'phone',
+        'current_position',
+        'current_company',
+        'experience_years',
+        'education_level',
+        'resume_path',
         'cover_letter_path',
-        'additional_documents',
-        'screening_answers',
-        'rejection_reason',
-        'interview_feedback',
-        'assessment_results',
+        'portfolio_url',
+        'linkedin_url',
+        'other_attachments',
+        'status',
+        'referral_source',
+        'expected_salary',
+        'notice_period',
+        'interview_availability',
+        'additional_notes',
         'reviewed_by',
-        'reviewed_at'
+        'reviewed_at',
     ];
 
     protected $casts = [
-        'additional_documents' => 'array',
-        'screening_answers' => 'array',
-        'interview_feedback' => 'array',
-        'assessment_results' => 'array',
-        'reviewed_at' => 'datetime'
+        'other_attachments' => 'array',
+        'interview_availability' => 'array',
+        'reviewed_at' => 'datetime',
+        'experience_years' => 'decimal:1',
+        'expected_salary' => 'decimal:2',
     ];
 
     // Relationships
@@ -40,66 +49,49 @@ class JobApplication extends Model
         return $this->belongsTo(JobPosting::class);
     }
 
-    public function candidate(): BelongsTo
-    {
-        return $this->belongsTo(Candidate::class);
-    }
-
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
     }
 
-    public function interviews(): HasMany
+    // Methods
+    public function getFullNameAttribute(): string
     {
-        return $this->hasMany(InterviewSchedule::class);
+        return "{$this->first_name} {$this->last_name}";
     }
 
-    public function offers(): HasMany
+    // Status methods
+    public function markAsReviewed(int $reviewer_id)
     {
-        return $this->hasMany(JobOffer::class);
+        $this->update([
+            'status' => 'reviewed',
+            'reviewed_by' => $reviewer_id,
+            'reviewed_at' => now(),
+        ]);
     }
 
-    // Scopes
-    public function scopePending($query)
+    public function shortlist()
     {
-        return $query->where('status', 'submitted');
+        $this->update(['status' => 'shortlisted']);
     }
 
-    public function scopeInReview($query)
+    public function reject()
     {
-        return $query->whereIn('status', ['under_review', 'shortlisted']);
+        $this->update(['status' => 'rejected']);
     }
 
-    public function scopeActive($query)
+    public function scheduleInterview()
     {
-        return $query->whereNotIn('status', ['rejected', 'withdrawn', 'hired']);
+        $this->update(['status' => 'interview_scheduled']);
     }
 
-    // Helpers
-    public function getLatestOfferAttribute()
+    public function completeInterview()
     {
-        return $this->offers()->latest()->first();
+        $this->update(['status' => 'interview_completed']);
     }
 
-    public function getNextInterviewAttribute()
+    public function hire()
     {
-        return $this->interviews()
-            ->where('scheduled_at', '>', now())
-            ->orderBy('scheduled_at')
-            ->first();
-    }
-
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($model) {
-            if (empty($model->application_number)) {
-                $lastApplication = self::withTrashed()->latest('id')->first();
-                $nextNumber = $lastApplication ? $lastApplication->id + 1 : 1;
-                $model->application_number = 'APP-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
-            }
-        });
+        $this->update(['status' => 'hired']);
     }
 }

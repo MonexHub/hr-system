@@ -7,18 +7,19 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class JobPosting extends Model
 {
     use HasFactory, SoftDeletes;
-
-    use SoftDeletes;
 
     protected $fillable = [
         'department_id',
         'position_code',
         'title',
         'description',
+        'document_path',
+        'is_document_based',
         'requirements',
         'responsibilities',
         'employment_type',
@@ -41,17 +42,9 @@ class JobPosting extends Model
         'screening_questions',
         'minimum_years_experience',
         'education_level',
-        'additional_requirements',
         'created_by',
         'approved_by',
         'approved_at',
-        'requirements',
-        'skills_required',
-        'education_requirements',
-        'experience_requirements',
-        'benefits',
-        'screening_questions',
-
     ];
 
     protected $casts = [
@@ -60,6 +53,7 @@ class JobPosting extends Model
         'is_remote' => 'boolean',
         'hide_salary' => 'boolean',
         'is_featured' => 'boolean',
+        'is_document_based' => 'boolean',
         'skills_required' => 'array',
         'education_requirements' => 'array',
         'experience_requirements' => 'array',
@@ -70,9 +64,7 @@ class JobPosting extends Model
         'approved_at' => 'datetime',
         'salary_min' => 'decimal:2',
         'salary_max' => 'decimal:2',
-
     ];
-
 
     // Relationships
     public function department(): BelongsTo
@@ -95,7 +87,6 @@ class JobPosting extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
-
     // Scopes
     public function scopePublished($query)
     {
@@ -116,38 +107,12 @@ class JobPosting extends Model
         return $query->whereIn('status', ['published', 'pending_approval']);
     }
 
-    public function scopeClosingSoon($query, $days = 7)
-    {
-        return $query->published()
-            ->whereNotNull('closing_date')
-            ->where('closing_date', '<=', now()->addDays($days));
-    }
-
     // Methods
-    public function hasApplied($employee): bool
-    {
-        if (!$employee) return false;
-        return $this->applications()->where('employee_id', $employee->id)->exists();
-    }
-
     public function isOpen(): bool
     {
         return $this->status === 'published' &&
             ($this->closing_date === null || $this->closing_date >= now()) &&
             $this->positions_filled < $this->positions_available;
-    }
-
-    public function publish()
-    {
-        $this->update([
-            'status' => 'published',
-            'publishing_date' => now()
-        ]);
-    }
-
-    public function close()
-    {
-        $this->update(['status' => 'closed']);
     }
 
     public function approve(int $approver_id)
@@ -156,7 +121,7 @@ class JobPosting extends Model
             'status' => 'published',
             'approved_by' => $approver_id,
             'approved_at' => now(),
-            'publishing_date' => now()
+            'publishing_date' => $this->publishing_date ?? now()
         ]);
     }
 
@@ -165,7 +130,20 @@ class JobPosting extends Model
         $this->update(['status' => 'draft']);
     }
 
-    // Accessor for formatted salary range
+    public function close()
+    {
+        $this->update(['status' => 'closed']);
+    }
+
+    public function markAsFilled()
+    {
+        $this->update([
+            'status' => 'filled',
+            'closing_date' => now()
+        ]);
+    }
+
+    // Format salary range for display
     public function getSalaryRangeAttribute(): string
     {
         if ($this->hide_salary) {
@@ -187,15 +165,21 @@ class JobPosting extends Model
         return 'Negotiable';
     }
 
-    // Boot method for automatic position code generation
+    // Boot method
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($jobPosting) {
+            // Generate position code
             if (empty($jobPosting->position_code)) {
                 $jobPosting->position_code = 'JOB-' . date('Y') . '-' .
                     str_pad(static::whereYear('created_at', date('Y'))->count() + 1, 5, '0', STR_PAD_LEFT);
+            }
+
+            // Set created_by
+            if (empty($jobPosting->created_by)) {
+                $jobPosting->created_by = auth()->id();
             }
         });
 
@@ -205,19 +189,49 @@ class JobPosting extends Model
             }
         });
 
-        static::creating(function ($jobPosting) {
-            // Automatically set the created_by to the currently authenticated user
-            if (empty($jobPosting->created_by)) {
-                $jobPosting->created_by = auth()->id();
+        static::deleting(function ($jobPosting) {
+            // Clean up uploaded document if exists
+            if ($jobPosting->document_path) {
+                Storage::delete($jobPosting->document_path);
             }
         });
     }
 
-    protected static function booted(): void
+    public function getApplicationsCountAttribute(): int
     {
-        static::creating(function ($jobPosting) {
-            $jobPosting->position_code = 'JOB-' . date('Y') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
-            $jobPosting->created_by = auth()->id();
-        });
+        return $this->applications()->count();
     }
+
+    public function getShortlistedCountAttribute(): int
+    {
+        return $this->applications()
+            ->where('status', 'shortlisted')
+            ->count();
+    }
+
+    public function getInterviewedCountAttribute(): int
+    {
+        return $this->applications()
+            ->whereIn('status', ['interview_scheduled', 'interview_completed'])
+            ->count();
+    }
+
+    public function getHiredCountAttribute(): int
+    {
+        return $this->applications()
+            ->where('status', 'hired')
+            ->count();
+    }
+
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
 }

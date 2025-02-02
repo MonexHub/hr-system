@@ -3,141 +3,83 @@
 namespace App\Filament\Admin\Resources;
 
 use App\Filament\Admin\Resources\UsersResource\Pages;
-use App\Filament\Admin\Resources\UsersResource\RelationManagers;
+
 use App\Models\User;
-use App\Models\Users;
+
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Collection;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Hash;
+use Spatie\Permission\Models\Role;
 
 class UsersResource extends Resource
 {
     protected static ?string $model = User::class;
     protected static ?string $navigationIcon = 'heroicon-o-users';
-    protected static ?string $navigationGroup = 'System Management';
+    protected static ?string $navigationGroup = 'User Management';
     protected static ?int $navigationSort = 1;
 
-    public static function getPermissionPrefixes(): array
-    {
-        return [
-            'view',
-            'view_any',
-            'create',
-            'update',
-            'delete',
-            'delete_any',
-            'terminate',
-            'manage_roles'
-        ];
-    }
+
 
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('User Information')
+                Forms\Components\Section::make('Account Management')
                     ->schema([
                         Forms\Components\TextInput::make('name')
                             ->required()
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->disabled(),
 
                         Forms\Components\TextInput::make('email')
                             ->email()
                             ->required()
-                            ->unique(ignoreRecord: true)
-                            ->maxLength(255),
-
-                        Forms\Components\TextInput::make('password')
-                            ->password()
-                            ->dehydrateStateUsing(fn($state) => Hash::make($state))
-                            ->required(fn(string $context): bool => $context === 'create')
-                            ->confirmed()
                             ->maxLength(255)
-                            ->visible(fn(string $context): bool => $context === 'create'),
-
-                        Forms\Components\TextInput::make('password_confirmation')
-                            ->password()
-                            ->maxLength(255)
-                            ->required(fn(string $context): bool => $context === 'create')
-                            ->visible(fn(string $context): bool => $context === 'create'),
+                            ->disabled(),
 
                         Forms\Components\Select::make('roles')
+                            ->label('Roles')
                             ->multiple()
-                            ->relationship('roles', 'name')
                             ->preload()
-                            ->searchable(),
-                    ])->columns(2),
+                            ->options(function () {
+                                if (auth()->user()->hasRole('super_admin')) {
+                                    return Role::query()
+                                        ->pluck('name', 'name')
+                                        ->toArray();
+                                }
 
-                Forms\Components\Section::make('Employee Details')
-                    ->schema([
-                        Forms\Components\Select::make('employee.department_id')
-                            ->relationship('employee.department', 'name')
-                            ->searchable()
-                            ->preload()
+                                return Role::query()
+                                    ->whereNotIn('name', ['super_admin'])
+                                    ->pluck('name', 'name')
+                                    ->toArray();
+                            })
+                            ->afterStateHydrated(function ($component, $state) {
+                                // When loading the form, get current role names
+                                $roleNames = Role::whereIn('id', $state ?? [])->pluck('name');
+                                $component->state($roleNames);
+                            })
                             ->required(),
 
-                        Forms\Components\Select::make('employee.organization_unit_id')
-                            ->relationship('employee.organizationUnit', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-
-                        Forms\Components\Select::make('employee.employment_status')
-                            ->options([
-                                'active' => 'Active',
-                                'probation' => 'Probation',
-                                'suspended' => 'Suspended',
-                                'terminated' => 'Terminated',
-                                'resigned' => 'Resigned',
-                            ])
-                            ->required()
-                            ->default('active'),
-
-                        Forms\Components\Select::make('employee.contract_type')
-                            ->options([
-                                'permanent' => 'Permanent',
-                                'contract' => 'Contract',
-                                'probation' => 'Probation',
-                                'intern' => 'Intern',
-                            ])
-                            ->required()
-                            ->default('permanent'),
-
-                        Forms\Components\DatePicker::make('employee.appointment_date')
-                            ->required()
-                            ->default(now()),
-
-                        Forms\Components\DatePicker::make('employee.contract_end_date')
-                            ->visible(fn(callable $get) => $get('employee.contract_type') !== 'permanent'),
-
-                        Forms\Components\DatePicker::make('employee.termination_date')
-                            ->visible(fn(callable $get) => $get('employee.employment_status') === 'terminated'),
-
-                        Forms\Components\Textarea::make('employee.termination_reason')
-                            ->visible(fn(callable $get) => $get('employee.employment_status') === 'terminated')
-                            ->columnSpanFull(),
-                    ])->columns(2)
-                    ->hidden(fn(?User $record) => $record === null || !$record->employee()->exists()),
+                        Forms\Components\Toggle::make('is_active')
+                            ->label('Account Active')
+                            ->default(true)
+                            ->helperText('Disable to prevent user from logging in'),
+                    ])
+                    ->columns(2),
             ]);
     }
-
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('employee.profile_photo')
-                    ->circular()
-                    ->defaultImageUrl(function ($record): string {
-                        return "https://ui-avatars.com/api/?name=" . urlencode($record->name) . "&color=FFFFFF&background=111827";
-                    }),
-
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
@@ -148,31 +90,89 @@ class UsersResource extends Resource
 
                 Tables\Columns\TextColumn::make('employee.department.name')
                     ->label('Department')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('employee.organizationUnit.name')
-                    ->label('Unit')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('roles.name')
                     ->badge()
-                    ->searchable()
+                    ->formatStateUsing(fn ($state) => ucfirst($state))
+                    ->color(fn (string $state): string => match ($state) {
+                        'super_admin' => 'danger',
+                        'hr_manager' => 'warning',
+                        'department_manager' => 'info',
+                        default => 'success',
+                    }),
+
+                Tables\Columns\IconColumn::make('is_active')
+                    ->boolean()
+                    ->label('Active')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('employee.employment_status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'active' => 'success',
-                        'probation' => 'warning',
-                        'suspended', 'terminated' => 'danger',
-                        default => 'gray',
-                    }),
+                Tables\Columns\TextColumn::make('last_login_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('roles')
+                    ->relationship('roles', 'name')
+                    ->multiple()
+                    ->preload(),
+
+                Tables\Filters\SelectFilter::make('department')
+                    ->relationship('employee.department', 'name'),
+
+                Tables\Filters\TernaryFilter::make('is_active')
+                    ->label('Account Status')
+                    ->boolean(),
+            ])
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('resetPassword')
+                    ->icon('heroicon-o-key')
+                    ->color('warning')
+                    ->form([
+                        Forms\Components\TextInput::make('password')
+                            ->password()
+                            ->label('New Password')
+                            ->required()
+                            ->confirmed(),
+                        Forms\Components\TextInput::make('password_confirmation')
+                            ->password()
+                            ->label('Confirm Password')
+                            ->required(),
+                    ])
+                    ->action(function (User $record, array $data): void {
+                        $record->update([
+                            'password' => Hash::make($data['password'])
+                        ]);
+                    })
+                    ->successNotification(
+                        \Filament\Notifications\Notification::make()
+                            ->success()
+                            ->title('Password reset successfully')
+                    ),
+            ])
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('activate')
+                        ->icon('heroicon-o-check')
+                        ->color('success')
+                        ->action(fn ($records) => $records->each->update(['is_active' => true]))
+                        ->requiresConfirmation(),
+                    Tables\Actions\BulkAction::make('deactivate')
+                        ->icon('heroicon-o-x-mark')
+                        ->color('danger')
+                        ->action(fn ($records) => $records->each->update(['is_active' => false]))
+                        ->requiresConfirmation(),
+                ]),
             ]);
-            // ... rest of the table configuration ...
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with(['employee.department', 'roles'])
+            ->latest();
     }
 
     public static function getRelations(): array
@@ -181,18 +181,23 @@ class UsersResource extends Resource
             //
         ];
     }
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->with(['employee.department', 'employee.unit', 'roles'])
-            ->latest();
-    }
     public static function getPages(): array
     {
         return [
             'index' => Pages\ListUsers::route('/'),
             'create' => Pages\CreateUsers::route('/create'),
             'edit' => Pages\EditUsers::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getPermissionPrefixes(): array
+    {
+        return [
+            'view',
+            'view_any',
+            'update',
+            'manage_roles',
+            'reset_password'
         ];
     }
 }

@@ -3,22 +3,11 @@
 namespace App\Filament\Admin\Resources\JobApplicationResource\Pages;
 
 use App\Filament\Admin\Resources\JobApplicationResource;
-use App\Filament\Admin\Resources\CandidateResource;
-use App\Filament\Admin\Resources\JobPostingResource;
-use App\Models\JobApplication;
 use Filament\Actions;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\Grid;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\FontWeight;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\HtmlString;
 
 class ViewJobApplication extends ViewRecord
 {
@@ -27,120 +16,60 @@ class ViewJobApplication extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            // Primary Actions
             Actions\EditAction::make()
-                ->modalWidth('lg'),
+                ->visible(fn () => $this->record->status === 'new'),
 
-            // Status Management Actions
-            Actions\Action::make('change_status')
-                ->icon('heroicon-o-arrow-path')
-                ->form([
-                    Select::make('status')
-                        ->options([
-                            'under_review' => 'Under Review',
-                            'shortlisted' => 'Shortlist',
-                            'rejected' => 'Reject',
-                        ])
-                        ->required()
-                        ->live(),
+            // Shortlist Action
+            Actions\Action::make('shortlist')
+                ->icon('heroicon-o-star')
+                ->color('warning')
+                ->action(fn () => $this->record->shortlist())
+                ->requiresConfirmation()
+                ->modalHeading('Shortlist Candidate')
+                ->modalDescription('Are you sure you want to shortlist this candidate?')
+                ->visible(fn () => in_array($this->record->status, ['new', 'reviewed'])),
 
-                    Textarea::make('notes')
-                        ->required()
-                        ->label('Status Change Notes'),
-
-                    Textarea::make('rejection_reason')
-                        ->required()
-                        ->visible(fn (callable $get) => $get('status') === 'rejected')
-                        ->label('Reason for Rejection'),
-                ])
-                ->action(function (array $data): void {
-                    $this->record->update([
-                        'status' => $data['status'],
-                        'rejection_reason' => $data['rejection_reason'] ?? null,
-                        'status_notes' => $data['notes'],
-                        'reviewed_at' => now(),
-                        'reviewed_by' => auth()->id(),
-                    ]);
-
-                    $this->notification()->success('Status updated successfully');
-                }),
-
-            // Interview Management
+            // Schedule Interview
             Actions\Action::make('schedule_interview')
                 ->icon('heroicon-o-calendar')
+                ->color('info')
+                ->action(fn () => $this->record->scheduleInterview())
+                ->requiresConfirmation()
+                ->visible(fn () => $this->record->status === 'shortlisted'),
+
+            // Complete Interview
+            Actions\Action::make('complete_interview')
+                ->icon('heroicon-o-check-circle')
                 ->color('success')
-                ->form([
-                    Select::make('interview_type')
-                        ->options([
-                            'screening' => 'Initial Screening',
-                            'technical' => 'Technical Interview',
-                            'hr' => 'HR Interview',
-                            'final' => 'Final Interview',
-                        ])
-                        ->required(),
+                ->action(fn () => $this->record->completeInterview())
+                ->requiresConfirmation()
+                ->visible(fn () => $this->record->status === 'interview_scheduled'),
 
-                    DateTimePicker::make('interview_date')
-                        ->required()
-                        ->minDate(now())
-                        ->timezone(config('app.timezone')),
+            // Hire
+            Actions\Action::make('hire')
+                ->icon('heroicon-o-user-plus')
+                ->color('success')
+                ->action(fn () => $this->record->hire())
+                ->requiresConfirmation()
+                ->modalHeading('Hire Candidate')
+                ->modalDescription('This will mark the candidate as hired. Continue?')
+                ->visible(fn () => $this->record->status === 'interview_completed'),
 
-                    Select::make('interview_mode')
-                        ->options([
-                            'in_person' => 'In Person',
-                            'video' => 'Video Call',
-                            'phone' => 'Phone Call',
-                        ])
-                        ->required()
-                        ->live(),
+            // Reject
+            Actions\Action::make('reject')
+                ->icon('heroicon-o-x-circle')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->modalHeading('Reject Application')
+                ->modalDescription('Are you sure you want to reject this application?')
+                ->action(fn () => $this->record->reject())
+                ->visible(fn () => !in_array($this->record->status, ['rejected', 'hired'])),
 
-                    TextInput::make('location')
-                        ->required()
-                        ->label(fn (callable $get) => match ($get('interview_mode')) {
-                            'in_person' => 'Interview Location',
-                            'video' => 'Meeting Link',
-                            'phone' => 'Phone Number',
-                            default => 'Location/Link'
-                        }),
-
-                    Select::make('interviewer_id')
-                        ->relationship('jobPosting.department.users', 'name')
-                        ->required()
-                        ->searchable(),
-
-                    Textarea::make('notes')
-                        ->label('Interview Instructions'),
-                ])
-                ->action(function (array $data): void {
-                    $this->record->update([
-                        'status' => 'interview_scheduled',
-                        'interview_details' => $data,
-                    ]);
-
-                    $this->notification()->success('Interview scheduled successfully');
-                })
-                ->visible(fn () => in_array($this->record->status, ['submitted', 'under_review', 'shortlisted'])),
-
-            // Document Actions
-            Actions\ActionGroup::make([
-                Actions\Action::make('download_cv')
-                    ->icon('heroicon-o-document-arrow-down')
-                    ->label('Download CV')
-                    ->url(fn () => $this->record->resume_path ? Storage::url($this->record->resume_path) : null)
-                    ->openUrlInNewTab()
-                    ->visible(fn () => $this->record->resume_path !== null),
-
-                Actions\Action::make('download_cover_letter')
-                    ->icon('heroicon-o-document-text')
-                    ->label('Download Cover Letter')
-                    ->url(fn () => $this->record->cover_letter_path ? Storage::url($this->record->cover_letter_path) : null)
-                    ->openUrlInNewTab()
-                    ->visible(fn () => $this->record->cover_letter_path !== null),
-
-                Actions\Action::make('email')
-                    ->icon('heroicon-o-envelope')
-                    ->label('Email Candidate')
-                    ->url(fn () => 'mailto:' . $this->record->candidate->email),
-            ])->label('Documents'),
+            // Download Resume
+            Actions\Action::make('download_resume')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn () => storage_path('app/public/' . $this->record->resume_path))
+                ->openUrlInNewTab(),
         ];
     }
 
@@ -148,183 +77,142 @@ class ViewJobApplication extends ViewRecord
     {
         return $infolist
             ->schema([
-                // Application Overview
-                Infolists\Components\Section::make('Application Overview')
+                // Application Status
+                Infolists\Components\Section::make()
                     ->schema([
-                        Infolists\Components\TextEntry::make('application_number')
-                            ->label('Reference')
-                            ->weight(FontWeight::Bold),
-
-                        Infolists\Components\TextEntry::make('created_at')
-                            ->label('Applied')
-                            ->dateTime(),
-
                         Infolists\Components\TextEntry::make('status')
                             ->badge()
-                            ->formatStateUsing(fn (string $state) => str($state)->title())
                             ->color(fn (string $state): string => match ($state) {
-                                'submitted' => 'gray',
-                                'under_review' => 'info',
+                                'new' => 'gray',
+                                'reviewed' => 'info',
                                 'shortlisted' => 'warning',
-                                'interview_scheduled', 'interview_completed' => 'warning',
-                                'offer_made' => 'success',
-                                'offer_accepted', 'hired' => 'success',
-                                'rejected', 'withdrawn', 'offer_declined' => 'danger',
+                                'interview_scheduled' => 'purple',
+                                'interview_completed' => 'blue',
+                                'hired' => 'success',
+                                'rejected' => 'danger',
                                 default => 'gray',
                             }),
+                    ])
+                    ->columnSpanFull(),
 
-                        Infolists\Components\TextEntry::make('reviewed_at')
-                            ->label('Last Review')
+                // Job Details
+                Infolists\Components\Section::make('Position Applied For')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('jobPosting.title')
+                            ->label('Position')
+                            ->weight(FontWeight::Bold),
+
+                        Infolists\Components\TextEntry::make('jobPosting.department.name')
+                            ->label('Department'),
+
+                        Infolists\Components\TextEntry::make('jobPosting.position_code')
+                            ->label('Reference Code'),
+
+                        Infolists\Components\TextEntry::make('created_at')
+                            ->label('Application Date')
                             ->dateTime(),
                     ])
                     ->columns(4),
 
-                // Position and Candidate Information
-                Infolists\Components\Grid::make(2)
+                // Personal Information
+                Infolists\Components\Section::make('Personal Information')
                     ->schema([
-                        Infolists\Components\Section::make('Position Details')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('jobPosting.title')
-                                    ->label('Position')
-                                    ->weight(FontWeight::Bold)
-                                    ->url(fn ($record) => JobPostingResource::getUrl('view', ['record' => $record->jobPosting]))
-                                    ->openUrlInNewTab(),
+                        Infolists\Components\TextEntry::make('first_name')
+                            ->label('First Name'),
 
-                                Infolists\Components\TextEntry::make('jobPosting.department.name')
-                                    ->label('Department'),
+                        Infolists\Components\TextEntry::make('last_name')
+                            ->label('Last Name'),
 
-                                Infolists\Components\TextEntry::make('jobPosting.location')
-                                    ->label('Location'),
+                        Infolists\Components\TextEntry::make('email')
+                            ->icon('heroicon-m-envelope'),
 
-                                Infolists\Components\TextEntry::make('jobPosting.salary_range')
-                                    ->label('Salary Range'),
-                            ]),
-
-                        Infolists\Components\Section::make('Candidate Information')
-                            ->schema([
-                                Infolists\Components\ImageEntry::make('candidate.photo_path')
-                                    ->label('Photo')
-                                    ->circular()
-                                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->candidate->full_name)),
-
-                                Infolists\Components\TextEntry::make('candidate.full_name')
-                                    ->label('Name')
-                                    ->weight(FontWeight::Bold)
-                                    ->url(fn ($record) => CandidateResource::getUrl('view', ['record' => $record->candidate]))
-                                    ->openUrlInNewTab(),
-
-                                Infolists\Components\TextEntry::make('candidate.email')
-                                    ->label('Email')
-                                    ->copyable(),
-
-                                Infolists\Components\TextEntry::make('candidate.phone')
-                                    ->label('Phone')
-                                    ->copyable(),
-                            ]),
-                    ]),
-
-                // Application Details
-                Infolists\Components\Section::make('Application Details')
-                    ->schema([
-                        Infolists\Components\TextEntry::make('cover_letter')
-                            ->label('Cover Letter')
-                            ->markdown()
-                            ->columnSpanFull(),
-
-                        Infolists\Components\RepeatableEntry::make('skills')
-                            ->label('Skills & Qualifications')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('skill')
-                                    ->label('Skill'),
-
-                                Infolists\Components\TextEntry::make('years')
-                                    ->label('Experience (Years)'),
-
-                                Infolists\Components\TextEntry::make('level')
-                                    ->badge(),
-                            ])
-                            ->columns(3),
-
-                        Infolists\Components\TextEntry::make('experience_summary')
-                            ->label('Experience Summary')
-                            ->markdown()
-                            ->columnSpanFull(),
+                        Infolists\Components\TextEntry::make('phone')
+                            ->icon('heroicon-m-phone'),
                     ])
-                    ->collapsible(),
+                    ->columns(2),
 
-                // Interview & Assessment
-                Infolists\Components\Section::make('Interview & Assessment')
+                // Professional Information
+                Infolists\Components\Section::make('Professional Information')
                     ->schema([
-                        Infolists\Components\TextEntry::make('interview_feedback')
-                            ->label('Interview Feedback')
-                            ->markdown()
-                            ->columnSpanFull()
-                            ->visible(fn ($record) => !empty($record->interview_feedback)),
+                        Infolists\Components\TextEntry::make('current_position')
+                            ->label('Current Position'),
 
-                        Infolists\Components\RepeatableEntry::make('assessment_results')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('category')
-                                    ->label('Category'),
+                        Infolists\Components\TextEntry::make('current_company')
+                            ->label('Current Company'),
 
-                                Infolists\Components\TextEntry::make('score')
-                                    ->label('Score')
-                                    ->badge()
-                                    ->color(fn (string $state): string => match ((int) $state) {
-                                        1, 2 => 'danger',
-                                        3 => 'warning',
-                                        4 => 'success',
-                                        5 => 'success',
-                                        default => 'gray',
-                                    }),
+                        Infolists\Components\TextEntry::make('experience_years')
+                            ->label('Years of Experience'),
 
-                                Infolists\Components\TextEntry::make('notes')
-                                    ->label('Notes'),
-                            ])
-                            ->columns(3)
-                            ->visible(fn ($record) => !empty($record->assessment_results)),
+                        Infolists\Components\TextEntry::make('education_level')
+                            ->label('Education Level'),
+
+                        Infolists\Components\TextEntry::make('expected_salary')
+                            ->label('Expected Salary')
+                            ->money('USD'),
+
+                        Infolists\Components\TextEntry::make('notice_period')
+                            ->label('Notice Period'),
                     ])
-                    ->collapsible()
-                    ->collapsed(),
+                    ->columns(3),
 
-                // Documents Section
-                Infolists\Components\Section::make('Documents')
+                // Documents
+                Infolists\Components\Section::make('Documents & Links')
                     ->schema([
                         Infolists\Components\TextEntry::make('resume_path')
                             ->label('Resume/CV')
-                            ->hidden(fn ($record) => !$record->resume_path)
-                            ->url(fn ($record) => Storage::url($record->resume_path))
-                            ->openUrlInNewTab(),
+                            ->url(fn ($record) => storage_path('app/public/' . $record->resume_path))
+                            ->openUrlInNewTab()
+                            ->icon('heroicon-m-document'),
 
-                        Infolists\Components\RepeatableEntry::make('additional_documents')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('name')
-                                    ->label('Document Name'),
-                                Infolists\Components\TextEntry::make('path')
-                                    ->label('Download')
-                                    ->url(fn ($record) => Storage::url($record['path']))
-                                    ->openUrlInNewTab(),
-                            ]),
+                        Infolists\Components\TextEntry::make('cover_letter_path')
+                            ->label('Cover Letter')
+                            ->url(fn ($record) => $record->cover_letter_path ?
+                                storage_path('app/public/' . $record->cover_letter_path) : null)
+                            ->openUrlInNewTab()
+                            ->visible(fn ($record) => $record->cover_letter_path)
+                            ->icon('heroicon-m-document-text'),
+
+                        Infolists\Components\TextEntry::make('portfolio_url')
+                            ->label('Portfolio')
+                            ->url()
+                            ->openUrlInNewTab()
+                            ->visible(fn ($record) => $record->portfolio_url)
+                            ->icon('heroicon-m-globe-alt'),
+
+                        Infolists\Components\TextEntry::make('linkedin_url')
+                            ->label('LinkedIn')
+                            ->url()
+                            ->openUrlInNewTab()
+                            ->visible(fn ($record) => $record->linkedin_url)
+                            ->icon('heroicon-s-square-3-stack-3d'),
                     ])
-                    ->collapsible(),
+                    ->columns(2),
 
-                // Notes & Timeline
-                Infolists\Components\Section::make('Application History')
+                // Additional Information
+                Infolists\Components\Section::make('Additional Information')
                     ->schema([
-                        Infolists\Components\RepeatableEntry::make('timeline')
-                            ->label('Status Updates')
-                            ->schema([
-                                Infolists\Components\TextEntry::make('date')
-                                    ->dateTime(),
-                                Infolists\Components\TextEntry::make('status')
-                                    ->badge(),
-                                Infolists\Components\TextEntry::make('notes')
-                                    ->markdown(),
-                                Infolists\Components\TextEntry::make('user'),
-                            ])
-                            ->columns(4),
+                        Infolists\Components\TextEntry::make('referral_source')
+                            ->label('Referral Source'),
+
+                        Infolists\Components\TextEntry::make('additional_notes')
+                            ->markdown()
+                            ->columnSpanFull(),
+                    ]),
+
+                // Review Information
+                Infolists\Components\Section::make('Review Information')
+                    ->schema([
+                        Infolists\Components\TextEntry::make('reviewer.name')
+                            ->label('Reviewed By')
+                            ->visible(fn ($record) => $record->reviewed_by),
+
+                        Infolists\Components\TextEntry::make('reviewed_at')
+                            ->label('Review Date')
+                            ->dateTime()
+                            ->visible(fn ($record) => $record->reviewed_at),
                     ])
-                    ->collapsible()
-                    ->collapsed(),
+                    ->columns(2)
+                    ->visible(fn ($record) => $record->reviewed_by || $record->reviewed_at),
             ]);
     }
 }

@@ -64,7 +64,8 @@ class ShieldSeeder extends Seeder
                 'force_delete_any'],
             'leave::request' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
                 'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
+                'force_delete_any',   'approve_manager', 'reject', 'create_for_others',
+                        ],
             'leave::balance' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
                 'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
                 'force_delete_any'],
@@ -137,6 +138,10 @@ class ShieldSeeder extends Seeder
             'view_leave::type', 'view_any_leave::type', 'create_leave::type', 'update_leave::type',
             'view_leave::request', 'view_any_leave::request', 'create_leave::request',
             'view_leave::balance', 'view_any_leave::balance', 'update_leave::balance',
+            'approve_leave_request',
+            'reject_leave::request',
+            'create_for_others_leave::request',
+
 
             // Recruitment
             'view_job::posting', 'view_any_job::posting', 'create_job::posting',
@@ -159,6 +164,9 @@ class ShieldSeeder extends Seeder
             'view_leave::request', 'view_any_leave::request',
             'view_leave::balance', 'view_any_leave::balance',
 
+            'approve_manager_leave::request',  //
+            'reject_leave::request',          //
+
             // Limited Recruitment Access
             'view_job::posting', 'view_any_job::posting',
             'view_job::application', 'view_any_job::application',
@@ -178,9 +186,11 @@ class ShieldSeeder extends Seeder
             // Leave Management
             'view_employee::leave::request', 'view_any_employee::leave::request',
             'create_employee::leave::request',
+            'update_employee::leave::request',
 
             // Job Portal Access
             'view_job::posting', 'view_any_job::posting'
+
         ];
     }
 

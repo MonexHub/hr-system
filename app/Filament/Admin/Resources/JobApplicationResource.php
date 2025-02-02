@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Support\Colors\Color;
 
 class JobApplicationResource extends Resource
 {
@@ -19,248 +20,241 @@ class JobApplicationResource extends Resource
 
     protected static ?string $navigationGroup = 'Recruitment';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     public static function form(Form $form): Form
     {
-        return $form->schema([
-            Forms\Components\Section::make('Application Details')
-                ->schema([
-                    Forms\Components\TextInput::make('application_number')
-                        ->default('APP-' . uniqid())
-                        ->disabled()
-                        ->dehydrated(),
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Job Selection')
+                    ->schema([
+                        Forms\Components\Select::make('job_posting_id')
+                            ->relationship('jobPosting', 'title')
+                            ->required()
+                            ->searchable()
+                            ->preload()
+                            ->disabled(fn (string $context): bool => $context === 'edit'),
+                    ]),
 
-                    Forms\Components\Select::make('job_posting_id')
-                        ->relationship('jobPosting', 'title')
-                        ->required()
-                        ->preload()
-                        ->searchable(),
+                Forms\Components\Section::make('Personal Information')
+                    ->schema([
+                        Forms\Components\TextInput::make('first_name')
+                            ->required()
+                            ->maxLength(255),
 
-                    Forms\Components\Select::make('candidate_id')
-                        ->relationship('candidate', 'first_name')
-                        ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name}")
-                        ->required()
-                        ->preload()
-                        ->searchable(),
+                        Forms\Components\TextInput::make('last_name')
+                            ->required()
+                            ->maxLength(255),
 
-                    Forms\Components\Select::make('status')
-                        ->options([
-                            'submitted' => 'Submitted',
-                            'under_review' => 'Under Review',
-                            'shortlisted' => 'Shortlisted',
-                            'rejected' => 'Rejected',
-                            'interview_scheduled' => 'Interview Scheduled',
-                            'interview_completed' => 'Interview Completed',
-                            'offer_made' => 'Offer Made',
-                            'offer_accepted' => 'Offer Accepted',
-                            'offer_declined' => 'Offer Declined',
-                            'withdrawn' => 'Withdrawn',
-                            'hired' => 'Hired'
-                        ])
-                        ->required()
-                        ->native(false),
-                ])->columns(2),
+                        Forms\Components\TextInput::make('email')
+                            ->email()
+                            ->required()
+                            ->maxLength(255),
 
-            Forms\Components\Section::make('Documents')
-                ->schema([
-                    Forms\Components\FileUpload::make('cover_letter_path')
-                        ->label('Cover Letter')
-                        ->directory('applications/cover-letters')
-                        ->preserveFilenames()
-                        ->maxSize(5120)
-                        ->downloadable(),
+                        Forms\Components\TextInput::make('phone')
+                            ->tel()
+                            ->required()
+                            ->maxLength(20),
+                    ])
+                    ->columns(2),
 
-                    Forms\Components\Repeater::make('additional_documents')
-                        ->schema([
-                            Forms\Components\FileUpload::make('document')
-                                ->required()
-                                ->preserveFilenames()
-                                ->directory('applications/documents'),
-                            Forms\Components\TextInput::make('description')
-                                ->required(),
-                        ])
-                        ->collapsible()
-                        ->itemLabel(fn (array $state): ?string => $state['description'] ?? null),
-                ]),
+                Forms\Components\Section::make('Professional Information')
+                    ->schema([
+                        Forms\Components\TextInput::make('current_position')
+                            ->required()
+                            ->maxLength(255),
 
-            Forms\Components\Section::make('Screening & Interview')
-                ->schema([
-                    Forms\Components\Repeater::make('screening_answers')
-                        ->schema([
-                            Forms\Components\TextInput::make('question')
-                                ->required(),
-                            Forms\Components\Textarea::make('answer')
-                                ->required(),
-                        ])
-                        ->collapsible()
-                        ->collapsed(),
+                        Forms\Components\TextInput::make('current_company')
+                            ->required()
+                            ->maxLength(255),
 
-                    Forms\Components\Textarea::make('interview_feedback')
-                        ->label('Interview Notes & Feedback')
-                        ->columnSpanFull(),
+                        Forms\Components\TextInput::make('experience_years')
+                            ->numeric()
+                            ->required()
+                            ->step(0.5)
+                            ->minValue(0)
+                            ->maxValue(50),
 
-                    Forms\Components\Repeater::make('assessment_results')
-                        ->schema([
-                            Forms\Components\TextInput::make('skill')
-                                ->required(),
-                            Forms\Components\Select::make('rating')
-                                ->options([
-                                    1 => 'Poor',
-                                    2 => 'Fair',
-                                    3 => 'Good',
-                                    4 => 'Very Good',
-                                    5 => 'Excellent'
-                                ])
-                                ->required(),
-                            Forms\Components\Textarea::make('notes'),
-                        ])
-                        ->collapsible()
-                        ->collapsed(),
-                ]),
+                        Forms\Components\Select::make('education_level')
+                            ->options([
+                                'high_school' => 'High School',
+                                'associate' => 'Associate Degree',
+                                'bachelor' => 'Bachelor\'s Degree',
+                                'master' => 'Master\'s Degree',
+                                'phd' => 'PhD/Doctorate',
+                                'other' => 'Other',
+                            ])
+                            ->required(),
+                    ])
+                    ->columns(2),
 
-            Forms\Components\Section::make('Notes & Decisions')
-                ->schema([
-                    Forms\Components\Textarea::make('rejection_reason')
-                        ->label('Rejection Reason')
-                        ->visible(fn (callable $get) => $get('status') === 'rejected'),
+                Forms\Components\Section::make('Documents')
+                    ->schema([
+                        Forms\Components\FileUpload::make('resume_path')
+                            ->label('Resume/CV')
+                            ->required()
+                            ->directory('applications/resumes')
+                            ->acceptedFileTypes(['application/pdf'])
+                            ->maxSize(5120),
 
-                    Forms\Components\Select::make('reviewed_by')
-                        ->relationship('reviewer', 'name')
-                        ->preload(),
+                        Forms\Components\FileUpload::make('cover_letter_path')
+                            ->label('Cover Letter')
+                            ->directory('applications/cover-letters')
+                            ->acceptedFileTypes(['application/pdf'])
+                            ->maxSize(5120),
 
-                    Forms\Components\DateTimePicker::make('reviewed_at')
-                        ->native(false),
-                ])->columns(2),
-        ]);
+                        Forms\Components\FileUpload::make('other_attachments')
+                            ->multiple()
+                            ->directory('applications/attachments')
+                            ->maxFiles(3)
+                            ->maxSize(5120),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Additional Information')
+                    ->schema([
+                        Forms\Components\TextInput::make('portfolio_url')
+                            ->url()
+                            ->maxLength(255),
+
+                        Forms\Components\TextInput::make('linkedin_url')
+                            ->url()
+                            ->maxLength(255),
+
+                        Forms\Components\TextInput::make('expected_salary')
+                            ->numeric()
+                            ->prefix('$'),
+
+                        Forms\Components\TextInput::make('notice_period')
+                            ->maxLength(50),
+
+                        Forms\Components\Select::make('referral_source')
+                            ->options([
+                                'company_website' => 'Company Website',
+                                'linkedin' => 'LinkedIn',
+                                'job_board' => 'Job Board',
+                                'employee_referral' => 'Employee Referral',
+                                'other' => 'Other',
+                            ]),
+
+                        Forms\Components\Textarea::make('additional_notes')
+                            ->maxLength(1000)
+                            ->columnSpanFull(),
+                    ])
+                    ->columns(2),
+            ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('application_number')
-                    ->searchable()
-                    ->sortable(),
-
                 Tables\Columns\TextColumn::make('jobPosting.title')
-                    ->label('Position')
+                    ->searchable()
+                    ->sortable()
+                    ->description(fn (JobApplication $record): string =>
+                    $record->jobPosting->position_code),
+
+                Tables\Columns\TextColumn::make('full_name')
+                    ->searchable(['first_name', 'last_name'])
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('email')
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('candidate.full_name')
-                    ->label('Candidate')
-                    ->searchable(['first_name', 'last_name'])
+                Tables\Columns\TextColumn::make('experience_years')
+                    ->numeric()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
-                        'submitted' => 'gray',
-                        'under_review' => 'info',
+                        'new' => 'gray',
+                        'reviewed' => 'info',
                         'shortlisted' => 'warning',
-                        'interview_scheduled', 'interview_completed' => 'warning',
-                        'offer_made' => 'success',
-                        'offer_accepted', 'hired' => 'success',
-                        'rejected', 'withdrawn', 'offer_declined' => 'danger',
+                        'interview_scheduled' => 'purple',
+                        'interview_completed' => 'blue',
+                        'hired' => 'success',
+                        'rejected' => 'danger',
                         default => 'gray',
                     }),
 
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Applied On')
-                    ->dateTime()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('reviewed_at')
                     ->dateTime()
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->multiple()
                     ->options([
-                        'submitted' => 'Submitted',
-                        'under_review' => 'Under Review',
+                        'new' => 'New',
+                        'reviewed' => 'Reviewed',
                         'shortlisted' => 'Shortlisted',
-                        'rejected' => 'Rejected',
                         'interview_scheduled' => 'Interview Scheduled',
                         'interview_completed' => 'Interview Completed',
-                        'offer_made' => 'Offer Made',
-                        'offer_accepted' => 'Offer Accepted',
-                        'offer_declined' => 'Offer Declined',
-                        'withdrawn' => 'Withdrawn',
-                        'hired' => 'Hired'
+                        'hired' => 'Hired',
+                        'rejected' => 'Rejected',
                     ]),
 
                 Tables\Filters\SelectFilter::make('job_posting')
                     ->relationship('jobPosting', 'title'),
-
-                Tables\Filters\Filter::make('created_at')
-                    ->form([
-                        Forms\Components\DatePicker::make('created_from'),
-                        Forms\Components\DatePicker::make('created_until'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when(
-                                $data['created_from'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '>=', $date),
-                            )
-                            ->when(
-                                $data['created_until'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('created_at', '<=', $date),
-                            );
-                    })
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('schedule_interview')
-                    ->form([
-                        Forms\Components\DateTimePicker::make('interview_date')
-                            ->required(),
-                        Forms\Components\TextInput::make('location')
-                            ->required(),
-                        Forms\Components\Textarea::make('notes'),
-                    ])
-                    ->action(function (JobApplication $record, array $data): void {
-                        // Handle interview scheduling
-                        $record->update([
-                            'status' => 'interview_scheduled',
-                            'interview_details' => $data,
-                        ]);
-                    })
+
+                // Download Resume
+                Tables\Actions\Action::make('download_resume')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->url(fn (JobApplication $record) => storage_path('app/public/' . $record->resume_path))
+                    ->openUrlInNewTab(),
+
+                // Shortlist
+                Tables\Actions\Action::make('shortlist')
+                    ->icon('heroicon-o-star')
+                    ->color('warning')
+                    ->action(fn (JobApplication $record) => $record->shortlist())
                     ->visible(fn (JobApplication $record): bool =>
-                    in_array($record->status, ['submitted', 'under_review', 'shortlisted'])
-                    ),
+                    in_array($record->status, ['new', 'reviewed'])),
+
+                // Schedule Interview
+                Tables\Actions\Action::make('schedule_interview')
+                    ->icon('heroicon-o-calendar')
+                    ->color('info')
+                    ->action(fn (JobApplication $record) => $record->scheduleInterview())
+                    ->visible(fn (JobApplication $record): bool =>
+                        $record->status === 'shortlisted'),
+
+                // Complete Interview
+                Tables\Actions\Action::make('complete_interview')
+                    ->icon('heroicon-o-check-circle')
+                    ->color('success')
+                    ->action(fn (JobApplication $record) => $record->completeInterview())
+                    ->visible(fn (JobApplication $record): bool =>
+                        $record->status === 'interview_scheduled'),
+
+                // Hire
+                Tables\Actions\Action::make('hire')
+                    ->icon('heroicon-o-user-plus')
+                    ->color('success')
+                    ->action(fn (JobApplication $record) => $record->hire())
+                    ->visible(fn (JobApplication $record): bool =>
+                        $record->status === 'interview_completed'),
+
+                // Reject
+                Tables\Actions\Action::make('reject')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(fn (JobApplication $record) => $record->reject())
+                    ->visible(fn (JobApplication $record): bool =>
+                    !in_array($record->status, ['rejected', 'hired'])),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\BulkAction::make('change_status')
-                        ->form([
-                            Forms\Components\Select::make('status')
-                                ->options([
-                                    'under_review' => 'Under Review',
-                                    'shortlisted' => 'Shortlisted',
-                                    'rejected' => 'Rejected',
-                                ])
-                                ->required(),
-                            Forms\Components\Textarea::make('notes')
-                                ->label('Status Change Notes'),
-                        ])
-                        ->action(function (Collection $records, array $data): void {
-                            $records->each(function ($record) use ($data) {
-                                $record->update([
-                                    'status' => $data['status'],
-                                    'status_notes' => $data['notes'],
-                                ]);
-                            });
-                        }),
                 ]),
-            ])
-            ->defaultSort('created_at', 'desc');
+            ]);
     }
 
     public static function getRelations(): array
@@ -282,11 +276,11 @@ class JobApplicationResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        return static::getModel()::where('status', 'submitted')->count() ?: null;
+        return static::getModel()::where('status', 'new')->count() ?: null;
     }
 
     public static function getNavigationBadgeColor(): ?string
     {
-        return static::getModel()::where('status', 'submitted')->exists() ? 'warning' : null;
+        return 'warning';
     }
 }

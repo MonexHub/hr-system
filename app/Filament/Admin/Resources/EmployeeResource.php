@@ -197,6 +197,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                             'intern' => 'Intern',
                                         ])
                                         ->required()
+                                        ->preload()
+                                        ->searchable()
                                         ->reactive()
                                         ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
 

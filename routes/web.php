@@ -2,6 +2,7 @@
 
 use App\Filament\Employee\Pages\CompleteProfile;
 use App\Http\Controllers\Admin\EmployeeAccountSetupController;
+use App\Http\Controllers\Admin\PublicJobController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -23,3 +24,11 @@ Route::get('/employee/setup-account/{token}', [EmployeeAccountSetupController::c
     ->name('employee.setup-account');
 Route::post('/employee/setup-account', [EmployeeAccountSetupController::class, 'setupAccount'])
     ->name('employee.complete-setup');
+
+Route::prefix('jobs')->name('jobs.')->group(function () {
+    Route::get('/', [PublicJobController::class, 'index'])->name('index');
+    Route::get('/{jobPosting}', [PublicJobController::class, 'show'])->name('show');
+    Route::get('/{jobPosting}/apply', [PublicJobController::class, 'apply'])->name('apply');
+    Route::post('/{jobPosting}/apply', [PublicJobController::class, 'store'])->name('submit');
+    Route::get('/thank-you', [PublicJobController::class, 'thankYou'])->name('thank-you');
+});

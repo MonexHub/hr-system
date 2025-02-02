@@ -30,19 +30,27 @@ class LeaveRequestResource extends Resource
         return $form->schema([
             Forms\Components\Section::make('Request Details')
                 ->schema([
+
+
                     Forms\Components\Select::make('employee_id')
                         ->relationship(
                             'employee',
                             'first_name',
-                            fn (Builder $query) => Auth::user()->hasRole('hr')
+                            fn (Builder $query) => Auth::user()->hasRole('hr_manager')
                                 ? $query
-                                : $query->where('reporting_to', Auth::user()->employee?->id)
+                                : $query->where('id', Auth::user()->employee?->id)
                         )
                         ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name}")
                         ->searchable()
                         ->preload()
                         ->required()
-                        ->disabled(fn () => !Auth::user()->hasRole('hr')),
+                        ->default(fn () => Auth::user()->hasRole('hr_manager') ? null : Auth::user()->employee?->id)
+                        ->disabled(fn () => !Auth::user()->hasRole('hr_manager'))
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            $set('leave_type_id', null);
+                            $set('remaining_days', null);
+                        }),
 
                     Forms\Components\Select::make('leave_type_id')
                         ->relationship('leaveType', 'name')
@@ -53,25 +61,26 @@ class LeaveRequestResource extends Resource
                             $leaveType = \App\Models\LeaveType::find($state);
                             $set('max_days', $leaveType?->max_days ?? 0);
 
-                            // Check remaining balance
                             if ($leaveType && $get('employee_id')) {
-                                // Get the leave balance for this employee, leave type, and current year
                                 $leaveBalance = \App\Models\LeaveBalance::where('employee_id', $get('employee_id'))
                                     ->where('leave_type_id', $state)
                                     ->where('year', now()->year)
                                     ->first();
-
-                                $usedDays = LeaveRequest::where('employee_id', $get('employee_id'))
-                                    ->where('leave_type_id', $state)
-                                    ->whereYear('start_date', now()->year)
-                                    ->where('status', 'approved')
-                                    ->sum('days_taken');
-
-                                // Calculate remaining days based on leave balance
                                 $remainingDays = $leaveBalance ? $leaveBalance->days_remaining : 0;
                                 $set('remaining_days', $remainingDays);
+
+                                // Reset dates if they were previously set
+                                if ($get('start_date') && $get('end_date')) {
+                                    static::validateAndCalculateDays(
+                                        $get('start_date'),
+                                        $get('end_date'),
+                                        $set,
+                                        $get
+                                    );
+                                }
                             }
                         }),
+
 
 
                     Forms\Components\DatePicker::make('start_date')
@@ -80,8 +89,26 @@ class LeaveRequestResource extends Resource
                         ->native(false)
                         ->reactive()
                         ->closeOnDateSelection()
-                        ->afterStateUpdated(fn ($state, callable $set, $get) =>
-                        static::calculateDays($state, $get('end_date'), $set)),
+                        ->live()
+                        ->afterStateUpdated(function ($state, callable $set, $get) {
+                            if ($state && $get('end_date')) {
+                                $startDate = \Carbon\Carbon::parse($state);
+                                $endDate = \Carbon\Carbon::parse($get('end_date'));
+
+                                // If end_date is before start_date, reset it
+                                if ($endDate->isBefore($startDate)) {
+                                    $set('end_date', $state);
+                                    $endDate = $startDate;
+                                }
+
+                                static::validateAndCalculateDays($state, $endDate, $set, $get);
+                            }
+                        })
+                        ->validationMessages([
+                            'required' => 'Please select a start date',
+                            'after_or_equal' => 'Start date must be today or later',
+                        ]),
+
 
                     Forms\Components\DatePicker::make('end_date')
                         ->required()
@@ -281,9 +308,25 @@ class LeaveRequestResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn (LeaveRequest $record): bool =>
+                        $record->status === 'pending' &&
+                        $record->employee_id === Auth::user()->employee?->id
+                    ),
 
-                // Manager Actions
+                // Cancel Action (for employees)
+                Tables\Actions\Action::make('cancel')
+                    ->icon('heroicon-o-x-circle')
+                    ->color(Color::Gray)
+                    ->requiresConfirmation()
+                    ->action(fn (LeaveRequest $record) => $record->update(['status' => 'cancelled']))
+                    ->visible(fn (LeaveRequest $record): bool =>
+                        $record->status === 'pending' &&
+                        $record->employee_id === Auth::user()->employee?->id
+                    )
+                    ->modalHeading('Cancel Leave Request'),
+
+                // Manager Actions (only visible to managers)
                 Tables\Actions\Action::make('manager_approve')
                     ->icon('heroicon-o-check')
                     ->color(Color::Green)
@@ -291,20 +334,24 @@ class LeaveRequestResource extends Resource
                     ->action(fn (LeaveRequest $record) => $record->approveByManager(Auth::id()))
                     ->visible(fn (LeaveRequest $record): bool =>
                         $record->status === 'pending' &&
-                        $record->employee->reporting_to === Auth::user()->employee?->id)
+                        $record->employee->reporting_to === Auth::user()->employee?->id &&
+                        !Auth::user()->hasRole('employee')
+                    )
                     ->modalHeading('Approve as Manager'),
 
-                // HR Actions
+                // HR Actions (only visible to HR)
                 Tables\Actions\Action::make('hr_approve')
                     ->icon('heroicon-o-check-circle')
                     ->color(Color::Green)
                     ->requiresConfirmation()
                     ->action(fn (LeaveRequest $record) => $record->approveByHR(Auth::id()))
                     ->visible(fn (LeaveRequest $record): bool =>
-                        $record->status === 'pending_hr' && Auth::user()->hasRole('hr'))
+                        $record->status === 'pending_hr' &&
+                        Auth::user()->hasRole('hr_manager')
+                    )
                     ->modalHeading('Approve as HR'),
 
-                // Reject Action
+                // Reject Action (only for managers and HR)
                 Tables\Actions\Action::make('reject')
                     ->icon('heroicon-o-x-mark')
                     ->color(Color::Red)
@@ -317,33 +364,54 @@ class LeaveRequestResource extends Resource
                         $record->reject(Auth::id(), $data['rejection_reason']);
                     })
                     ->visible(fn (LeaveRequest $record): bool =>
-                        $record->status === 'pending' ||
-                        ($record->status === 'pending_hr' && Auth::user()->hasRole('hr'))),
+                        ($record->status === 'pending' &&
+                            $record->employee->reporting_to === Auth::user()->employee?->id &&
+                            !Auth::user()->hasRole('employee')) ||
+                        ($record->status === 'pending_hr' &&
+                            Auth::user()->hasRole('hr_manager'))
+                    ),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn (): bool => Auth::user()->hasRole('super_admin')),
 
-                    // Bulk Manager Approval
+                    // Bulk Cancel (for employees)
+                    Tables\Actions\BulkAction::make('cancel_selected')
+                        ->label('Cancel Selected')
+                        ->icon('heroicon-o-x-circle')
+                        ->color(Color::Gray)
+                        ->requiresConfirmation()
+                        ->action(fn (Collection $records) => $records->each(fn ($record) =>
+                        $record->update(['status' => 'cancelled'])
+                        ))
+                        ->visible(fn () => Auth::user()->hasRole('employee'))
+                        ->deselectRecordsAfterCompletion(),
+
+                    // Bulk Manager Approval (only for managers)
                     Tables\Actions\BulkAction::make('manager_approve_selected')
                         ->label('Approve as Manager')
                         ->icon('heroicon-o-check')
                         ->color(Color::Green)
                         ->requiresConfirmation()
                         ->action(fn (Collection $records) => $records->each(fn ($record) =>
-                        $record->approveByManager(Auth::id())))
-                        ->visible(fn () => !Auth::user()->hasRole('hr'))
+                        $record->approveByManager(Auth::id())
+                        ))
+                        ->visible(fn () => !Auth::user()->hasRole('employee') &&
+                            Auth::user()->hasRole('department_manager')
+                        )
                         ->deselectRecordsAfterCompletion(),
 
-                    // Bulk HR Approval
+                    // Bulk HR Approval (only for HR)
                     Tables\Actions\BulkAction::make('hr_approve_selected')
                         ->label('Approve as HR')
                         ->icon('heroicon-o-check-circle')
                         ->color(Color::Green)
                         ->requiresConfirmation()
                         ->action(fn (Collection $records) => $records->each(fn ($record) =>
-                        $record->approveByHR(Auth::id())))
-                        ->visible(fn () => Auth::user()->hasRole('hr'))
+                        $record->approveByHR(Auth::id())
+                        ))
+                        ->visible(fn () => Auth::user()->hasRole('hr_manager'))
                         ->deselectRecordsAfterCompletion(),
                 ]),
             ]);
@@ -418,8 +486,59 @@ class LeaveRequestResource extends Resource
             });
         }
 
+        // Add this for HR: Only show pending_hr requests
+        if (auth()->user()->hasRole('hr_manager')) {
+            return $query->where('status', 'pending_hr');
+        }
+
         return $query;
     }
+
+
+    protected static function validateAndCalculateDays($startDate, $endDate, callable $set, callable $get): void
+    {
+        if (!$startDate || !$endDate) {
+            $set('days_taken', null);
+            return;
+        }
+
+        $start = \Carbon\Carbon::parse($startDate);
+        $end = \Carbon\Carbon::parse($endDate);
+
+        if ($start->isAfter($end)) {
+            $set('days_taken', null);
+            \Filament\Notifications\Notification::make()
+                ->danger()
+                ->title('Invalid Date Selection')
+                ->body('End date cannot be before start date')
+                ->send();
+            return;
+        }
+
+        $days = 0;
+        $current = clone $start;
+
+        while ($current->lte($end)) {
+            // Skip weekends (6 = Saturday, 0 = Sunday)
+            if (!in_array($current->dayOfWeek, [6, 0])) {
+                $days++;
+            }
+            $current->addDay();
+        }
+
+        $set('days_taken', $days);
+
+        // Validate against remaining days
+        $remainingDays = $get('remaining_days') ?? 0;
+        if ($days > $remainingDays) {
+            \Filament\Notifications\Notification::make()
+                ->warning()
+                ->title('Leave Balance Warning')
+                ->body("Requested leave ({$days} days) exceeds available balance ({$remainingDays} days)")
+                ->send();
+        }
+    }
+
 
 
 

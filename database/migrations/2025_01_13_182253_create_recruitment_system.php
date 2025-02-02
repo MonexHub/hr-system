@@ -45,58 +45,39 @@ return new class extends Migration
         // Job Postings Table
         Schema::create('job_postings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('department_id')->constrained();
+            $table->foreignId('department_id')->constrained()->cascadeOnDelete();
             $table->string('position_code')->unique();
             $table->string('title');
-            $table->text('description');
-            $table->json('requirements');
-            $table->json('responsibilities');
-            $table->enum('employment_type', [
-                'full_time',
-                'part_time',
-                'contract',
-                'temporary',
-                'internship'
-            ]);
-            $table->string('location');
+            $table->text('description')->nullable();
+            $table->string('document_path')->nullable();
+            $table->boolean('is_document_based')->default(false);
+            $table->json('requirements')->nullable();
+            $table->json('responsibilities')->nullable();
+            $table->string('employment_type');
+            $table->string('location')->nullable();
             $table->boolean('is_remote')->default(false);
-            $table->decimal('salary_min', 15, 2)->nullable();
-            $table->decimal('salary_max', 15, 2)->nullable();
+            $table->decimal('salary_min', 12, 2)->nullable();
+            $table->decimal('salary_max', 12, 2)->nullable();
             $table->string('salary_currency')->default('USD');
             $table->boolean('hide_salary')->default(false);
             $table->integer('positions_available')->default(1);
             $table->integer('positions_filled')->default(0);
             $table->date('publishing_date')->nullable();
             $table->date('closing_date')->nullable();
-            $table->enum('status', [
-                'draft',
-                'pending_approval',
-                'published',
-                'closed',
-                'cancelled',
-                'filled'
-            ])->default('draft');
+            $table->string('status')->default('draft');
             $table->boolean('is_featured')->default(false);
             $table->json('skills_required')->nullable();
             $table->json('education_requirements')->nullable();
             $table->json('experience_requirements')->nullable();
             $table->json('benefits')->nullable();
             $table->json('screening_questions')->nullable();
-            $table->integer('minimum_years_experience')->default(0);
+            $table->integer('minimum_years_experience')->nullable();
             $table->string('education_level')->nullable();
-            $table->text('additional_requirements')->nullable();
-            $table->foreignId('created_by')->constrained('users');
-            $table->foreignId('approved_by')->nullable()->constrained('users');
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
-
-            $table->index('title');
-            $table->index('status');
-            $table->index('closing_date');
-            $table->index(['department_id', 'status']);
-            $table->index(['status', 'is_featured']);
-            $table->fullText(['title', 'description']);
         });
 
         // Job Applications Table

@@ -25,32 +25,62 @@ class EmployeeLeaveRequestResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make()
-                ->description('Submit a new leave request. Your available balance will be shown after selecting leave type.')
+            Forms\Components\Section::make('Request Details')
+                ->description('Create or edit leave request. Available balance will be shown after selecting employee and leave type.')
                 ->schema([
+                    Forms\Components\Select::make('employee_id')
+                        ->relationship(
+                            'employee',
+                            'first_name',
+                            fn (Builder $query) => Auth::user()->hasRole('hr')
+                                ? $query
+                                : $query->where('reporting_to', Auth::user()->employee?->id)
+                        )
+                        ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name}")
+                        ->searchable()
+                        ->preload()
+                        ->required()
+                        ->disabled(fn () => !Auth::user()->hasRole('hr'))
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            $set('leave_type_id', null);
+                            $set('remaining_days', null);
+                        }),
+
                     Forms\Components\Select::make('leave_type_id')
                         ->relationship('leaveType', 'name')
                         ->required()
                         ->preload()
                         ->reactive()
-                        ->afterStateUpdated(function ($state, callable $set) {
+                        ->afterStateUpdated(function ($state, callable $set, $get) {
                             if (!$state) return;
 
-                            $leaveBalance = \App\Models\LeaveBalance::where('employee_id', Auth::user()->employee->id)
+                            $employeeId = $get('employee_id');
+                            if (!$employeeId) return;
+
+                            $leaveBalance = \App\Models\LeaveBalance::where('employee_id', $employeeId)
                                 ->where('leave_type_id', $state)
                                 ->where('year', now()->year)
                                 ->first();
 
-                            $set('remaining_days', $leaveBalance?->days_remaining ?? 0);
+                            $usedDays = LeaveRequest::where('employee_id', $employeeId)
+                                ->where('leave_type_id', $state)
+                                ->whereYear('start_date', now()->year)
+                                ->where('status', 'approved')
+                                ->sum('days_taken');
+
+                            // Calculate remaining days based on leave balance
+                            $remainingDays = $leaveBalance ? $leaveBalance->days_remaining : 0;
+                            $set('remaining_days', $remainingDays);
+                            $set('max_days', $leaveBalance?->total_days ?? 0);
 
                             // Show balance notification
                             \Filament\Notifications\Notification::make()
                                 ->info()
                                 ->title('Leave Balance')
-                                ->body("You have {$leaveBalance?->days_remaining} days remaining for this leave type.")
+                                ->body("Available balance: {$remainingDays} days")
                                 ->send();
-                        })
-                        ->columnSpanFull(),
+                        }),
 
                     Forms\Components\Grid::make(2)
                         ->schema([
@@ -63,7 +93,7 @@ class EmployeeLeaveRequestResource extends Resource
                                 ->weekStartsOnMonday()
                                 ->displayFormat('d/m/Y')
                                 ->afterStateUpdated(fn ($state, callable $set, $get) =>
-                                self::validateDates($state, $get('end_date'), $set, $get)),
+                                static::calculateDays($state, $get('end_date'), $set, $get)),
 
                             Forms\Components\DatePicker::make('end_date')
                                 ->label('To Date')
@@ -74,35 +104,48 @@ class EmployeeLeaveRequestResource extends Resource
                                 ->weekStartsOnMonday()
                                 ->displayFormat('d/m/Y')
                                 ->afterStateUpdated(fn ($state, callable $set, $get) =>
-                                self::validateDates($get('start_date'), $state, $set, $get)),
+                                static::calculateDays($get('start_date'), $state, $set, $get)),
                         ]),
 
-                    Forms\Components\Grid::make(2)
+                    Forms\Components\Grid::make(3)
                         ->schema([
                             Forms\Components\TextInput::make('days_taken')
                                 ->label('Days Requested')
                                 ->disabled()
                                 ->numeric()
                                 ->suffix('days')
-                                ->hint(fn ($get) => $get('remaining_days') > 0
-                                    ? "Available: {$get('remaining_days')} days"
-                                    : "No days available"),
+                                ->dehydrated(),
+
+                            Forms\Components\TextInput::make('max_days')
+                                ->label('Annual Allowance')
+                                ->numeric()
+                                ->disabled()
+                                ->dehydrated(false),
 
                             Forms\Components\TextInput::make('remaining_days')
-                                ->label('Balance After Request')
-                                ->disabled()
+                                ->label('Available Balance')
                                 ->numeric()
-                                ->suffix('days')
+                                ->disabled()
                                 ->dehydrated(false)
                                 ->formatStateUsing(fn ($state, $get) =>
-                                max(0, ($state ?? 0) - ($get('days_taken') ?? 0))),
+                                max(0, ($state ?? 0) - ($get('days_taken') ?? 0)))
+                                ->hint(fn ($state) => $state < 0 ? 'Insufficient balance!' : '')
+                                ->hintColor('danger'),
                         ]),
+                ])
+                ->columns(2),
 
+            Forms\Components\Section::make('Request Information')
+                ->schema([
                     Forms\Components\RichEditor::make('reason')
                         ->required()
                         ->label('Leave Reason')
-                        ->placeholder('Please provide detailed reason for your leave request')
-                        ->toolbarButtons(['bold', 'bulletList', 'italic'])
+                        ->placeholder('Please provide detailed reason for the leave request')
+                        ->toolbarButtons([
+                            'bold',
+                            'bulletList',
+                            'orderedList',
+                        ])
                         ->columnSpanFull(),
 
                     Forms\Components\FileUpload::make('attachments')
@@ -115,9 +158,56 @@ class EmployeeLeaveRequestResource extends Resource
                         ->maxSize(5120)
                         ->acceptedFileTypes(['application/pdf', 'image/*'])
                         ->columnSpanFull(),
+
+                    Forms\Components\Select::make('status')
+                        ->options(function () {
+                            if (Auth::user()->hasRole('hr')) {
+                                return [
+                                    'pending' => 'Pending',
+                                    'pending_hr' => 'Pending HR',
+                                    'approved' => 'Approved',
+                                    'rejected' => 'Rejected',
+                                    'cancelled' => 'Cancelled',
+                                ];
+                            }
+                            return [
+                                'pending' => 'Pending',
+                                'pending_hr' => 'Pending HR',
+                                'rejected' => 'Rejected',
+                                'cancelled' => 'Cancelled',
+                            ];
+                        })
+                        ->default('pending')
+                        ->disabled(fn (string $context): bool => $context === 'create')
+                        ->required(),
+
+                    Forms\Components\Textarea::make('rejection_reason')
+                        ->required(fn (callable $get) => $get('status') === 'rejected')
+                        ->visible(fn (callable $get) => $get('status') === 'rejected'),
+
+                    Forms\Components\Textarea::make('notes')
+                        ->label('Additional Notes'),
                 ])
                 ->columns(2),
-        ]);
+        ])->columns(1);
+    }
+
+    protected static function calculateDays($startDate, $endDate, callable $set, callable $get): void
+    {
+        if (!$startDate || !$endDate) return;
+
+        $days = ceil(\Carbon\Carbon::parse($startDate)->diffInDays(\Carbon\Carbon::parse($endDate)) + 1);
+        $set('days_taken', $days);
+
+        $remainingDays = $get('remaining_days') ?? 0;
+        if ($days > $remainingDays) {
+            \Filament\Notifications\Notification::make()
+                ->danger()
+                ->title('Insufficient Leave Balance')
+                ->body("Requested {$days} days exceeds available balance of {$remainingDays} days.")
+                ->persistent()
+                ->send();
+        }
     }
 
     protected static function validateDates($startDate, $endDate, callable $set, callable $get): void
@@ -217,20 +307,6 @@ class EmployeeLeaveRequestResource extends Resource
             ->where('employee_id', Auth::user()->employee->id);
     }
 
-    protected static function calculateDays($startDate, $endDate, callable $set): void
-    {
-        if ($startDate && $endDate) {
-            $days = ceil(Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate)) + 1);
-            $set('days_taken', $days);
-        }
-    }
-
-    public static function getRelations(): array
-    {
-        return [
-            //
-        ];
-    }
 
     public static function getPages(): array
     {
@@ -238,6 +314,22 @@ class EmployeeLeaveRequestResource extends Resource
             'index' => Pages\ListEmployeeLeaveRequests::route('/'),
             'create' => Pages\CreateEmployeeLeaveRequest::route('/create'),
             'edit' => Pages\EditEmployeeLeaveRequest::route('/{record}/edit'),
+        ];
+    }
+
+
+    public static function getPermissionPrefixes(): array
+    {
+        return [
+            'view',
+            'view_any',
+            'create',
+            'update',
+            'delete',
+            'approve_manager',  // For department managers
+            'approve_hr',       // For HR managers
+            'reject',
+            'create_for_others' // Special permission for HR to create requests for others
         ];
     }
 }
