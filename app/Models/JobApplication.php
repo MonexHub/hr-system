@@ -2,16 +2,19 @@
 
 namespace App\Models;
 
+use App\Notifications\RecruitmentNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 class JobApplication extends Model
 {
     use SoftDeletes;
-
     protected $fillable = [
+        'application_number',
         'job_posting_id',
+        'candidate_id',
         'first_name',
         'last_name',
         'email',
@@ -22,17 +25,16 @@ class JobApplication extends Model
         'education_level',
         'resume_path',
         'cover_letter_path',
+        'other_attachments',
         'portfolio_url',
         'linkedin_url',
-        'other_attachments',
-        'status',
-        'referral_source',
         'expected_salary',
         'notice_period',
-        'interview_availability',
+        'referral_source',
         'additional_notes',
+        'status',
         'reviewed_by',
-        'reviewed_at',
+        'reviewed_at'
     ];
 
     protected $casts = [
@@ -70,28 +72,68 @@ class JobApplication extends Model
         ]);
     }
 
-    public function shortlist()
-    {
-        $this->update(['status' => 'shortlisted']);
-    }
-
-    public function reject()
-    {
-        $this->update(['status' => 'rejected']);
-    }
-
     public function scheduleInterview()
     {
-        $this->update(['status' => 'interview_scheduled']);
-    }
-
-    public function completeInterview()
-    {
-        $this->update(['status' => 'interview_completed']);
+        DB::transaction(function () {
+            $this->update(['status' => 'interview_scheduled']);
+            if ($this->candidate) {
+                $this->candidate->update(['status' => 'interview']);
+            }
+        });
     }
 
     public function hire()
     {
-        $this->update(['status' => 'hired']);
+        DB::transaction(function () {
+            $this->update(['status' => 'hired']);
+            if ($this->candidate) {
+                $this->candidate->update(['status' => 'hired']);
+            }
+        });
+    }
+
+    public function reject()
+    {
+        DB::transaction(function () {
+            $this->update(['status' => 'rejected']);
+            if ($this->candidate) {
+                $this->candidate->update(['status' => 'rejected']);
+            }
+        });
+    }
+
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::created(function ($application) {
+            if ($application->candidate) {
+                $application->candidate->notify(new RecruitmentNotification('created', [ // Added 'created' type
+                    'job_title' => $application->jobPosting->title,
+                    'application_number' => $application->application_number,
+                    'application_id' => $application->id
+                ]));
+            }
+        });
+    }
+
+    public function shortlist()
+    {
+        DB::transaction(function () {
+            $this->update(['status' => 'shortlisted']);
+            if ($this->candidate) {
+                $this->candidate->update(['status' => 'shortlisted']);
+                $this->candidate->notify(new RecruitmentNotification('shortlisted', [
+                    'job_title' => $this->jobPosting->title,
+                    'application_id' => $this->id
+                ]));
+            }
+        });
+    }
+
+    public function candidate(): BelongsTo
+    {
+        return $this->belongsTo(Candidate::class);
     }
 }

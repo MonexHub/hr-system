@@ -66,6 +66,8 @@ class JobPosting extends Model
         'salary_max' => 'decimal:2',
     ];
 
+
+
     // Relationships
     public function department(): BelongsTo
     {
@@ -233,5 +235,6 @@ class JobPosting extends Model
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
+
 
 }

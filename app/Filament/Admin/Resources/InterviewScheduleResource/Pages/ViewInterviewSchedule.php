@@ -4,14 +4,17 @@ namespace App\Filament\Admin\Resources\InterviewScheduleResource\Pages;
 
 use App\Filament\Admin\Resources\InterviewScheduleResource;
 use App\Filament\Admin\Resources\JobApplicationResource;
+use App\Notifications\RecruitmentNotification;
 use Filament\Actions;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\FontWeight;
+use Illuminate\Support\Facades\DB;
 
 class ViewInterviewSchedule extends ViewRecord
 {
@@ -26,73 +29,99 @@ class ViewInterviewSchedule extends ViewRecord
                 ->color('success')
                 ->icon('heroicon-o-check-circle')
                 ->form([
-                    Textarea::make('feedback')
-                        ->label('Interview Feedback')
-                        ->required(),
-
+                    Textarea::make('feedback')->required(),
                     TextInput::make('rating')
-                        ->label('Overall Rating (1-5)')
                         ->numeric()
                         ->minValue(1)
                         ->maxValue(5)
                         ->required(),
-
-                    Textarea::make('recommendations')
-                        ->label('Recommendations'),
+                    Textarea::make('recommendations'),
                 ])
                 ->action(function (array $data) {
-                    $this->record->update([
-                        'status' => 'completed',
-                        'feedback' => $data['feedback'],
-                        'rating' => $data['rating'],
-                        'recommendations' => $data['recommendations'],
-                    ]);
+                    DB::transaction(function () use ($data) {
+                        $this->record->update([
+                            'status' => 'completed',
+                            'feedback' => $data['feedback'],
+                            'rating' => $data['rating'],
+                            'recommendations' => $data['recommendations'],
+                        ]);
 
-                    $this->notification()->success('Interview marked as completed');
+                        if ($this->record->jobApplication) {
+                            $this->record->jobApplication->update(['status' => 'interview_completed']);
+
+                            if ($candidate = $this->record->jobApplication->candidate) {
+                                $candidate->update(['status' => 'interview']);
+                                $candidate->notify(new RecruitmentNotification('interview_completed', [
+                                    'job_title' => $this->record->jobApplication->jobPosting->title,
+                                    'feedback' => $data['feedback'],
+                                    'rating' => $data['rating']
+                                ]));
+                            }
+                        }
+                    });
+                    Notification::make()->title('Interview marked as completed')->success()->send();
                 })
+                ->requiresConfirmation()
                 ->visible(fn () => in_array($this->record->status, ['scheduled', 'confirmed'])),
 
             Actions\Action::make('reschedule')
                 ->color('warning')
                 ->icon('heroicon-o-calendar')
                 ->form([
-                   DateTimePicker::make('new_date')
-                        ->label('New Date & Time')
-                        ->required()
-                        ->minDate(now()),
-
-                    Textarea::make('reason')
-                        ->label('Reason for Rescheduling')
-                        ->required(),
+                    DateTimePicker::make('new_date')->required()->minDate(now()),
+                    Textarea::make('reason')->required(),
                 ])
                 ->action(function (array $data) {
-                    $this->record->update([
-                        'status' => 'rescheduled',
-                        'scheduled_at' => $data['new_date'],
-                        'cancellation_reason' => $data['reason'],
-                    ]);
+                    DB::transaction(function () use ($data) {
+                        $this->record->update([
+                            'status' => 'rescheduled',
+                            'scheduled_at' => $data['new_date'],
+                            'cancellation_reason' => $data['reason'],
+                        ]);
 
-                    $this->notification()->success('Interview rescheduled successfully');
+                        if ($candidate = $this->record->jobApplication?->candidate) {
+                            $candidate->notify(new RecruitmentNotification('interview_rescheduled', [
+                                'job_title' => $this->record->jobApplication->jobPosting->title,
+                                'interview_date' => $data['new_date']->toDateString(),
+                                'interview_time' => $data['new_date']->format('H:i'),
+                                'reason' => $data['reason']
+                            ]));
+                        }
+                    });
+                    Notification::make()->title('Interview rescheduled')->success()->send();
                 })
+                ->requiresConfirmation()
                 ->visible(fn () => in_array($this->record->status, ['scheduled', 'confirmed'])),
 
             Actions\Action::make('cancel')
                 ->color('danger')
                 ->icon('heroicon-o-x-circle')
                 ->form([
-                    Textarea::make('reason')
-                        ->label('Cancellation Reason')
-                        ->required(),
+                    Textarea::make('reason')->required(),
                 ])
                 ->action(function (array $data) {
-                    $this->record->update([
-                        'status' => 'cancelled',
-                        'cancellation_reason' => $data['reason'],
-                    ]);
+                    DB::transaction(function () use ($data) {
+                        $this->record->update([
+                            'status' => 'cancelled',
+                            'cancellation_reason' => $data['reason'],
+                        ]);
 
-                    $this->notification()->success('Interview cancelled');
+                        if ($this->record->jobApplication) {
+                            $this->record->jobApplication->update(['status' => 'interview_cancelled']);
+
+                            if ($candidate = $this->record->jobApplication->candidate) {
+                                $candidate->update(['status' => 'rejected']);
+                                $candidate->notify(new RecruitmentNotification('interview_cancelled', [
+                                    'job_title' => $this->record->jobApplication->jobPosting->title,
+                                    'reason' => $data['reason']
+                                ]));
+                            }
+                        }
+                    });
+                    Notification::make()->title('Interview cancelled')->success()->send();
                 })
-                ->visible(fn () => in_array($this->record->status, ['scheduled', 'confirmed'])),
+                ->requiresConfirmation()
+                ->visible(fn () => in_array($this->record->status, ['scheduled', 'confirmed']))
         ];
     }
 

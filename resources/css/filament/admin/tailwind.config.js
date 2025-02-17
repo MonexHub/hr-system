@@ -6,6 +6,6 @@ export default {
         './app/Filament/Admin/**/*.php',
         './resources/views/filament/admin/**/*.blade.php',
         './vendor/filament/**/*.blade.php',
-        './vendor/diogogpinto/filament-auth-ui-enhancer/resources/**/*.blade.php',
+        'vendor/nuxtifyts/dash-stack-theme/resources/css/theme.css'
     ],
 }

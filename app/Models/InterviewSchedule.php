@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Notifications\RecruitmentNotification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,6 +30,7 @@ class InterviewSchedule extends Model
         'recommendations',
         'created_by'
     ];
+
 
     protected $casts = [
         'scheduled_at' => 'datetime',
@@ -83,4 +85,33 @@ class InterviewSchedule extends Model
         return in_array($this->status, ['scheduled', 'confirmed']) &&
             $this->scheduled_at > now();
     }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (!$model->created_by) {
+                $model->created_by = auth()->id();
+            }
+        });
+
+        static::created(function ($interview) {
+            $candidate = $interview->jobApplication->candidate;
+            if ($candidate) {
+                $candidate->notify(new RecruitmentNotification('interview_scheduled', [
+                    'job_title' => $interview->jobApplication->jobPosting->title,
+                    'interview_date' => $interview->scheduled_at->toDateString(),
+                    'interview_time' => $interview->scheduled_at->format('H:i'),
+                    'interview_mode' => $interview->mode,
+                    'meeting_link' => $interview->meeting_link,
+                    'location' => $interview->location,
+                    'interviewer_name' => $interview->interviewer->name,
+                    'application_id' => $interview->jobApplication->id
+                ]));
+            }
+        });
+    }
+
+
 }

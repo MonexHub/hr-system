@@ -19,6 +19,7 @@ class JobTitle extends Model
      */
     protected $fillable = [
         'name',
+        'department_id',
         'description',
         'net_salary_min',
         'net_salary_max',
@@ -95,5 +96,10 @@ class JobTitle extends Model
             'net_salary_max' => ['nullable', 'numeric', 'min:0', 'gte:net_salary_min'],
             'is_active' => ['boolean'],
         ];
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
     }
 }

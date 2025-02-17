@@ -6,28 +6,32 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
+    public function up()
     {
         Schema::create('leave_balances', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('employee_id');
-            $table->unsignedBigInteger('leave_type_id');
-            $table->integer('total_days');
-            $table->integer('days_taken');
-            $table->integer('days_remaining');
+            $table->foreignId('employee_id')->constrained('employees');
+            $table->foreignId('leave_type_id')->constrained('leave_types');
+            $table->integer('entitled_days');
+            $table->integer('carried_forward_days')->default(0);
+            $table->integer('additional_days')->default(0);
+            $table->integer('taken_days')->default(0);
+            $table->integer('pending_days')->default(0);
+            // Virtual column for days_remaining calculation
+            $table->integer('days_remaining')->virtualAs('entitled_days + carried_forward_days + additional_days - taken_days - pending_days')->nullable();
             $table->year('year');
+            $table->text('remarks')->nullable();
+            $table->foreignId('created_by')->constrained('users');
             $table->timestamps();
-            $table->unique(['employee_id', 'leave_type_id', 'year']);
+            $table->softDeletes();
+
+            // Indexes
+            $table->index(['employee_id', 'leave_type_id', 'year']);
+            $table->index('days_remaining');
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('leave_balances');
     }

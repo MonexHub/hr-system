@@ -3,11 +3,14 @@
 namespace App\Filament\Admin\Resources\JobOfferResource\Pages;
 
 use App\Filament\Admin\Resources\JobOfferResource;
+use App\Notifications\RecruitmentNotification;
+use App\Services\JobStateService;
 use Filament\Actions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\FontWeight;
 
@@ -30,7 +33,13 @@ class ViewJobOffer extends ViewRecord
                         'approved_by' => auth()->id(),
                         'approved_at' => now(),
                     ]);
-                    $this->notification()->success('Offer approved successfully');
+
+                    $this->record->jobApplication->candidate->notify(new RecruitmentNotification('offer_approved', [
+                        'job_title' => $this->record->jobApplication->jobPosting->title,
+                        'offer_id' => $this->record->id
+                    ]));
+
+                    Notification::make()->title('Offer approved successfully')->success()->send();
                 })
                 ->visible(fn () => $this->record->status === 'pending_approval'),
 
@@ -41,7 +50,18 @@ class ViewJobOffer extends ViewRecord
                         'status' => 'sent',
                         'sent_at' => now(),
                     ]);
-                    $this->notification()->success('Offer sent to candidate');
+
+                    $this->record->jobApplication->candidate->notify(new RecruitmentNotification('offer_sent', [
+                        'job_title' => $this->record->jobApplication->jobPosting->title,
+                        'base_salary' => $this->record->base_salary,
+                        'start_date' => $this->record->proposed_start_date,
+                        'valid_until' => $this->record->valid_until,
+                        'department' => $this->record->jobApplication->jobPosting->department->name,
+                        'offer_id' => $this->record->id
+                    ]));
+
+//                    $this->notification()->success('Offer sent to candidate');
+                    Notification::make()->title('Offer sent to candidate')->success()->send();
                 })
                 ->visible(fn () => $this->record->status === 'approved'),
 
@@ -49,19 +69,24 @@ class ViewJobOffer extends ViewRecord
                 ->icon('heroicon-o-check-circle')
                 ->color('success')
                 ->form([
-                    DatePicker::make('acceptance_date')
-                        ->required()
-                        ->default(now()),
-                    Textarea::make('notes')
-                        ->label('Acceptance Notes'),
+                    DatePicker::make('acceptance_date')->required()->default(now()),
+                    Textarea::make('notes')->label('Acceptance Notes'),
                 ])
-                ->action(function (array $data) {
+                ->action(function (array $data, JobStateService $jobStateService) {
                     $this->record->update([
                         'status' => 'accepted',
                         'responded_at' => $data['acceptance_date'],
                         'internal_notes' => $data['notes'],
                     ]);
-                    $this->notification()->success('Offer marked as accepted');
+
+                    $jobStateService->handleOfferAcceptance($this->record);
+
+                    $this->record->jobApplication->candidate->notify(new RecruitmentNotification('offer_accepted', [
+                        'job_title' => $this->record->jobApplication->jobPosting->title,
+                        'start_date' => $this->record->proposed_start_date
+                    ]));
+
+                    Notification::make()->title('Offer marked as accepted')->success()->send();
                 })
                 ->visible(fn () => $this->record->status === 'sent'),
 
@@ -69,12 +94,8 @@ class ViewJobOffer extends ViewRecord
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
                 ->form([
-                    Textarea::make('rejection_reason')
-                        ->required()
-                        ->label('Reason for Rejection'),
-                    DatePicker::make('rejection_date')
-                        ->default(now())
-                        ->required(),
+                    Textarea::make('rejection_reason')->required(),
+                    DatePicker::make('rejection_date')->default(now())->required()
                 ])
                 ->action(function (array $data) {
                     $this->record->update([
@@ -82,7 +103,14 @@ class ViewJobOffer extends ViewRecord
                         'rejection_reason' => $data['rejection_reason'],
                         'responded_at' => $data['rejection_date'],
                     ]);
-                    $this->notification()->success('Offer marked as rejected');
+
+                    $this->record->jobApplication->candidate->notify(new RecruitmentNotification('offer_rejected', [
+                        'job_title' => $this->record->jobApplication->jobPosting->title,
+                        'reason' => $data['rejection_reason']
+                    ]));
+
+
+                    Notification::make()->title('Offer marked as rejected')->success()->send();
                 })
                 ->visible(fn () => in_array($this->record->status, ['sent', 'negotiating'])),
         ];

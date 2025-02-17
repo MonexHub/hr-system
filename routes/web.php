@@ -3,6 +3,9 @@
 use App\Filament\Employee\Pages\CompleteProfile;
 use App\Http\Controllers\Admin\EmployeeAccountSetupController;
 use App\Http\Controllers\Admin\PublicJobController;
+use App\Livewire\JobApplication;
+use App\Livewire\JobListing;
+use App\Livewire\JobShow;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -26,9 +29,13 @@ Route::post('/employee/setup-account', [EmployeeAccountSetupController::class, '
     ->name('employee.complete-setup');
 
 Route::prefix('jobs')->name('jobs.')->group(function () {
+    // Put the thank you route BEFORE any routes with parameters
+    Route::get('thank-you', [PublicJobController::class, 'thankYou'])->name('thank-you');
+
+    // Then put all other routes
     Route::get('/', [PublicJobController::class, 'index'])->name('index');
-    Route::get('/{jobPosting}', [PublicJobController::class, 'show'])->name('show');
     Route::get('/{jobPosting}/apply', [PublicJobController::class, 'apply'])->name('apply');
-    Route::post('/{jobPosting}/apply', [PublicJobController::class, 'store'])->name('submit');
-    Route::get('/thank-you', [PublicJobController::class, 'thankYou'])->name('thank-you');
+    Route::post('/{jobPosting}/apply', [PublicJobController::class, 'store'])->name('store');
+    Route::get('/{jobPosting}', [PublicJobController::class, 'show'])->name('show');
 });
+
