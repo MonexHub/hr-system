@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\Log;
+use Carbon\CarbonImmutable;
 
 class Employee extends Model
 {
@@ -45,6 +50,7 @@ class Employee extends Model
 
     protected $casts = [
         'birthdate' => 'date',
+        'gender' => Gender::class,
         'appointment_date' => 'date',
         'contract_end_date' => 'date',
         'salary' => 'decimal:2',
@@ -453,6 +459,117 @@ class Employee extends Model
                 'used' => $balance->used + $days
             ]);
         }
+    }
+
+    /**
+     * Parse date strings into Carbon instances with intelligent year handling
+     */
+    protected function parseDate($value): Carbon
+    {
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+
+        // Set locale to English for consistent month parsing
+        CarbonImmutable::setLocale('en');
+
+        try {
+            // Normalize separators and clean up the string
+            $normalized = str_replace(['/', '.'], '-', $value);
+            $normalized = preg_replace('/\s+/', ' ', trim($normalized)); // Clean extra spaces
+
+            // Standardize month abbreviations and remove unwanted characters
+            $normalized = preg_replace_callback(
+                '/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i',
+                function ($matches) {
+                    return ucfirst(strtolower($matches[1]));
+                },
+                $normalized
+            );
+
+            // Remove any trailing separators that might cause parsing issues
+            $normalized = trim($normalized, "- \t\n\r\0\x0B");
+
+            // Get current year context for 2-digit year handling
+            $currentYear = (int) date('Y');
+            $currentShortYear = (int) date('y');
+            $centuryThreshold = $currentShortYear + 1; // Years above this are considered past century
+
+            // Ordered by likelihood of occurrence in the input data
+            $formats = [
+                'd-M-y', 'd-M-Y',    // DD-MMM-YY/YYYY (14-Feb-21)
+                'd-m-y', 'd-m-Y',    // DD-MM-YY/YYYY
+                'm-d-y', 'm-d-Y',    // MM-DD-YY/YYYY
+                'y-m-d', 'Y-m-d',    // YY/YYYY-MM-DD
+                'M-d-y', 'M-d-Y',    // MMM-DD-YY/YYYY (Feb-14-21)
+                'j M y', 'j M Y',    // DD MMM YY/YYYY (14 Feb 21)
+                'M j, Y', 'M j, y',  // MMM DD, YYYY/YY (Feb 14, 2021)
+            ];
+
+            foreach ($formats as $format) {
+                try {
+                    $date = Carbon::createFromFormat($format, $normalized);
+
+                    // Handle 2-digit year logic using sliding window
+                    if (strpos($format, 'y') !== false) {
+                        $parsedYear = (int) $date->format('y');
+
+                        // Adjust century for 2-digit years
+                        if ($parsedYear > $centuryThreshold) {
+                            $date = $date->subCentury();
+                        }
+                    }
+
+                    return $date;
+                } catch (Exception $e) {
+                    continue;
+                }
+            }
+
+            // Final fallback with intelligent year adjustment
+            try {
+                $date = Carbon::parse($normalized);
+
+                // Adjust dates that are too far in the future
+                if ($date->year > $currentYear + 20) {
+                    $date = $date->subCentury();
+                }
+
+                if (!$date->isValid()) {
+                    throw new Exception("Invalid date: {$value}");
+                }
+
+                return $date;
+            } catch (Exception $e) {
+                Log::error("Date parsing failed for value: {$value}", [
+                    'normalized' => $normalized,
+                    'error' => $e->getMessage()
+                ]);
+                throw new Exception("Unparseable date: {$value}");
+            }
+
+        } catch (\Throwable $th) {
+            Log::error('DATE PARSE ERROR', [
+                'original_value' => $value,
+                'normalized' => $normalized ?? 'N/A',
+                'error' => $th->getMessage(),
+                'trace' => $th->getTraceAsString()
+            ]);
+            throw $th;
+        }
+    }
+
+    /**
+     * Automatically parse dates when setting attributes
+     */
+    public function setBirthdateAttribute($value)
+    {
+        $this->attributes['birthdate'] = $this->parseDate($value);
+    }
+
+    public function setAppointmentDateAttribute($value)
+    {
+        $this->attributes['appointment_date'] = $this->parseDate($value);
     }
 
 

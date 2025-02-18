@@ -10,9 +10,11 @@ use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EducationRelat
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EmergencyContactsRelationManager;
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
+use App\Filament\Imports\EmployeeImporter;
 use App\Filament\Imports\EmployeeImportImporter;
 use App\Mail\NewEmployeeAccountSetupMail;
 use App\Models\Employee;
+use App\Models\EmployeeImport;
 use App\Services\BeemService;
 use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
 use Filament\Forms;
@@ -479,7 +481,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
             ])
             ->headerActions([
                 ImportAction::make()
-                    ->importer(EmployeeImportImporter::class)
+                    ->importer(EmployeeImporter::class)
                     ->color('warning')
                     ->visible(fn() => auth()->user()->can('import_employee')),
             ])
