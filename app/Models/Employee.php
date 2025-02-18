@@ -50,11 +50,27 @@ class Employee extends Model
 
     protected $casts = [
         'birthdate' => 'date',
-        'gender' => Gender::class,
         'appointment_date' => 'date',
         'contract_end_date' => 'date',
         'salary' => 'decimal:2',
     ];
+
+    protected $guarded = ['department', 'job_title'];
+
+    protected static function boot()
+{
+    parent::boot();
+
+    static::creating(function ($employee) {
+        unset($employee->department);
+        unset($employee->job_title);
+    });
+
+    static::saving(function ($employee) {
+        unset($employee->department);
+        unset($employee->job_title);
+    });
+}
 
     // Self-referencing relationships
     public function reportingTo(): BelongsTo
@@ -570,6 +586,11 @@ class Employee extends Model
     public function setAppointmentDateAttribute($value)
     {
         $this->attributes['appointment_date'] = $this->parseDate($value);
+    }
+
+    public function setGenderValue($value)
+    {
+        $this->attributes['gender'] = strtolower(trim($value));
     }
 
 

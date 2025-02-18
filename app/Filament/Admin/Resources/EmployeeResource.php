@@ -11,7 +11,6 @@ use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EmergencyConta
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
 use App\Filament\Imports\EmployeeImporter;
-use App\Filament\Imports\EmployeeImportImporter;
 use App\Mail\NewEmployeeAccountSetupMail;
 use App\Models\Employee;
 use App\Models\EmployeeImport;
@@ -481,9 +480,9 @@ class EmployeeResource extends Resource implements HasShieldPermissions
             ])
             ->headerActions([
                 ImportAction::make()
-                    ->importer(EmployeeImporter::class)
-                    ->color('warning')
-                    ->visible(fn() => auth()->user()->can('import_employee')),
+                ->importer(EmployeeImporter::class)
+                ->color('warning')
+                ->visible(fn() => auth()->user()->can('import_employee')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -589,6 +588,13 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
         // Send email to employee
         Mail::to($record->email)->send(new NewEmployeeAccountSetupMail($record, $token));
+    }
+
+    public static function getImports(): array
+    {
+        return [
+            EmployeeImporter::class, // Ensure this is included!
+        ];
     }
 
 
