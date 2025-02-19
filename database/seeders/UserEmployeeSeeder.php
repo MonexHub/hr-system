@@ -23,66 +23,88 @@ class UserEmployeeSeeder extends Seeder
         // Get Departments and Units
         $hrDepartment = Department::where('name', 'Human Resources')->first();
         $hrUnit = OrganizationUnit::where('name', 'Human Resources')->first();
-        $itDepartment = Department::where('name', 'Software Development')->first();
-        $itUnit = OrganizationUnit::where('name', 'Software Development')->first();
+        $itDepartment = Department::where('name', 'SIMBA MONEY')->first();
+        $itUnit = OrganizationUnit::where('name', 'SIMBA MONEY')->first();
 
         // Get Job Titles
-        $ceoTitle = JobTitle::where('name', 'Chief Executive Officer')->first();
-        $hrManagerTitle = JobTitle::where('name', 'Human Resources Manager')->first();
-        $devManagerTitle = JobTitle::where('name', 'Project Manager')->first();
-        $devTitle = JobTitle::where('name', 'Software Engineer')->first();
+        $groupCEOTitle = JobTitle::where('name', 'Group CEO')->first();
+        $hrDirectorTitle = JobTitle::where('name', 'Group HR Director')->first();
+        $ctoTitle = JobTitle::where('name', 'CTO')->first();
+        $itOfficerTitle = JobTitle::where('name', 'IT Officer')->first();
 
         // Create Super Admin
         $admin = $this->createUserAndEmployee(
-            'John Doe',
-            'admin@monex.co.tz',
+            'Thecla Denis Ntyangiri',
+            'admin@simbagrp.com',
             'super_admin',
             $hrDepartment,
             $hrUnit,
-            $hrManagerTitle
+            $hrDirectorTitle,
+            null,
+            'SGRP002',
+            'female',
+            '1982-11-07',
+            1500000,
+            '2022-11-14'
         );
 
-        // Create CEO (separate user)
+        // Create CEO
         $ceo = $this->createUserAndEmployee(
-            'James Wilson',
-            'ceo@monex.co.tz',
+            'David Lusan Ndelwa',
+            'ceo@simbagrp.com',
             'chief_executive_officer',
             $hrDepartment,
             $hrUnit,
-            $ceoTitle
+            $groupCEOTitle,
+            null,
+            'SLES28',
+            'male',
+            '1990-10-25',
+            1500000,
+            '2015-01-05'
         );
 
-        // Create HR Manager
+        // Create HR Director/Manager
         $hrManager = $this->createUserAndEmployee(
-            'Jane Smith',
-            'hr@monex.co.tz',
+            'Harry Godfrey Mbise',
+            'hr@simbagrp.com',
             'hr_manager',
             $hrDepartment,
             $hrUnit,
-            $hrManagerTitle,
-            $ceo->employee->id // Reports to CEO
+            $hrDirectorTitle,
+            $ceo->employee->id,
+            'SGRP005',
+            'male',
+            '1997-05-06',
+            1400000,
+            '2023-09-25'
         );
 
-        // Create IT Manager (Department Head)
+        // Create IT Manager (CTO)
         $itManager = $this->createUserAndEmployee(
-            'Mike Johnson',
-            'it.manager@monex.co.tz',
+            'Edgar Aidan Komba',
+            'it.manager@simbagrp.com',
             'department_head',
             $itDepartment,
             $itUnit,
-            $devManagerTitle,
-            $ceo->employee->id // Reports to CEO
+            $ctoTitle,
+            $ceo->employee->id,
+            '002/22/SML',
+            'male',
+            '1991-11-07',
+            1500000,
+            '2021-01-01'
         );
 
-        // Create Regular Employees
+        // Create Regular IT Employee
         $developers = [
             [
-                'name' => 'Alice Brown',
-                'email' => 'alice@monex.co.tz',
-            ],
-            [
-                'name' => 'Bob Wilson',
-                'email' => 'bob@monex.co.tz',
+                'name' => 'David John Haule',
+                'email' => 'david.haule@simbagrp.com',
+                'code' => '004/22/SML',
+                'birthdate' => '1995-03-09',
+                'salary' => 714000,
+                'appointment_date' => '2021-10-21'
             ]
         ];
 
@@ -93,15 +115,33 @@ class UserEmployeeSeeder extends Seeder
                 'employee',
                 $itDepartment,
                 $itUnit,
-                $devTitle,
-                $itManager->employee->id // Reports to IT Manager
+                $itOfficerTitle,
+                $itManager->employee->id,
+                $dev['code'],
+                'male',
+                $dev['birthdate'],
+                $dev['salary'],
+                $dev['appointment_date']
             );
         }
 
         $this->updateHeadcounts([$hrDepartment, $itDepartment], [$hrUnit, $itUnit]);
     }
 
-    private function createUserAndEmployee($name, $email, $role, $department, $unit, $jobTitle, $reportingTo = null)
+    private function createUserAndEmployee(
+        $name,
+        $email,
+        $role,
+        $department,
+        $unit,
+        $jobTitle,
+        $reportingTo = null,
+        $empCode = null,
+        $gender = 'male',
+        $birthdate = '1990-01-01',
+        $salary = null,
+        $appointmentDate = null
+    )
     {
         // Create or update user
         $user = User::updateOrCreate(
@@ -109,28 +149,29 @@ class UserEmployeeSeeder extends Seeder
             [
                 'name' => $name,
                 'password' => Hash::make('password123'),
-                'email_verified_at' => now() // Add email verification
+                'email_verified_at' => now()
             ]
         );
 
-        // Sync role instead of just assigning
+        // Sync role
         if (!$user->hasRole($role)) {
             $user->syncRoles([$role]);
         }
 
         $nameParts = explode(' ', $name);
 
-        // Create or update employee with more fields
+        // Create or update employee
         $employee = Employee::updateOrCreate(
             ['user_id' => $user->id],
             [
-                'employee_code' => $this->generateEmployeeCode(),
+                'employee_code' => $empCode ?? $this->generateEmployeeCode(),
                 'first_name' => $nameParts[0],
-                'last_name' => $nameParts[1] ?? '',
-                'gender' => 'male',
-                'birthdate' => '1990-01-01',
+                'last_name' => end($nameParts),
+                'middle_name' => count($nameParts) > 2 ? $nameParts[1] : null,
+                'gender' => $gender,
+                'birthdate' => $birthdate,
                 'marital_status' => 'single',
-                'phone_number' => '+255742' . str_pad(Employee::count() + 1, 6, '0', STR_PAD_LEFT),
+                'phone_number' => '+255742' . str_pad(rand(100000, 999999), 6, '0', STR_PAD_LEFT),
                 'email' => $email,
                 'permanent_address' => 'Dar es Salaam',
                 'city' => 'Dar es Salaam',
@@ -139,12 +180,12 @@ class UserEmployeeSeeder extends Seeder
                 'job_title_id' => $jobTitle->id,
                 'department_id' => $department ? $department->id : null,
                 'unit_id' => $unit ? $unit->id : null,
-                'net_salary' => $jobTitle->net_salary_min,
+                'net_salary' => $salary ?? $jobTitle->net_salary_min,
                 'employment_status' => 'active',
                 'application_status' => 'active',
-                'contract_type' => 'permanent',
+                'contract_type' => 'contract',
                 'terms_of_employment' => 'full-time',
-                'appointment_date' => now(),
+                'appointment_date' => $appointmentDate ?? now(),
                 'reporting_to' => $reportingTo
             ]
         );
@@ -155,7 +196,7 @@ class UserEmployeeSeeder extends Seeder
 
     private function generateEmployeeCode()
     {
-        $prefix = 'EMP';
+        $prefix = 'SLES';
         $count = Employee::count() + 1;
         return $prefix . str_pad($count, 3, '0', STR_PAD_LEFT);
     }

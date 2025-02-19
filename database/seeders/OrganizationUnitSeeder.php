@@ -23,14 +23,14 @@ class OrganizationUnitSeeder extends Seeder
         // Create Divisions (Level 1)
         $divisions = [
             [
-                'name' => 'Technology Division',
-                'code' => 'TECH-DIV',
-                'description' => 'Technology and Innovation Division',
+                'name' => 'Logistics Division',
+                'code' => 'LOG-DIV',
+                'description' => 'Logistics and Transportation Division',
             ],
             [
                 'name' => 'Operations Division',
                 'code' => 'OPS-DIV',
-                'description' => 'Operations and Management Division',
+                'description' => 'Operations and Services Division',
             ],
             [
                 'name' => 'Business Division',
@@ -59,20 +59,21 @@ class OrganizationUnitSeeder extends Seeder
     private function createDepartments(OrganizationUnit $division): void
     {
         $departments = [
-            'Technology Division' => [
-                ['name' => 'Software Development', 'code' => 'TECH-SD'],
-                ['name' => 'Infrastructure', 'code' => 'TECH-INF'],
-                ['name' => 'Digital Innovation', 'code' => 'TECH-DI'],
+            'Logistics Division' => [
+                ['name' => 'SIMBA LOGISTIC', 'code' => 'LOG-SL'],
+                ['name' => 'SIMBA COURIER', 'code' => 'LOG-SC'],
+                ['name' => 'SIMBA VIT', 'code' => 'LOG-SV'],
             ],
             'Operations Division' => [
+                ['name' => 'PUMP', 'code' => 'OPS-PUMP'],
                 ['name' => 'Human Resources', 'code' => 'OPS-HR'],
                 ['name' => 'Finance', 'code' => 'OPS-FIN'],
-                ['name' => 'Administration', 'code' => 'OPS-ADM'],
+                ['name' => 'SHEQ', 'code' => 'OPS-SHEQ'],
             ],
             'Business Division' => [
-                ['name' => 'Sales', 'code' => 'BIZ-SALES'],
+                ['name' => 'SIMBA FOODS', 'code' => 'BIZ-SF'],
+                ['name' => 'SIMBA MONEY', 'code' => 'BIZ-SM'],
                 ['name' => 'Marketing', 'code' => 'BIZ-MKT'],
-                ['name' => 'Customer Relations', 'code' => 'BIZ-CR'],
             ],
         ];
 
@@ -88,8 +89,8 @@ class OrganizationUnitSeeder extends Seeder
                 'is_active' => true,
                 'level' => 2,
                 'order_index' => $index + 1,
-                'annual_budget' => rand(100000, 500000),
-                'max_headcount' => rand(10, 50),
+                'annual_budget' => rand(1000000, 5000000),
+                'max_headcount' => rand(20, 100),
                 'current_headcount' => 0,
             ]);
 
@@ -101,22 +102,46 @@ class OrganizationUnitSeeder extends Seeder
     private function createTeams(OrganizationUnit $department): void
     {
         $teams = [
-            'Software Development' => [
-                ['name' => 'Frontend Team', 'code' => 'SD-FE'],
-                ['name' => 'Backend Team', 'code' => 'SD-BE'],
-                ['name' => 'QA Team', 'code' => 'SD-QA'],
+            'SIMBA LOGISTIC' => [
+                ['name' => 'Fleet Management', 'code' => 'SL-FM'],
+                ['name' => 'Tracking Administration', 'code' => 'SL-TA'],
+                ['name' => 'Distribution', 'code' => 'SL-DIST'],
             ],
-            'Infrastructure' => [
-                ['name' => 'Cloud Team', 'code' => 'INF-CLD'],
-                ['name' => 'Network Team', 'code' => 'INF-NET'],
-                ['name' => 'Security Team', 'code' => 'INF-SEC'],
+            'SIMBA COURIER' => [
+                ['name' => 'Fleet Operations', 'code' => 'SC-FO'],
+                ['name' => 'Customer Service', 'code' => 'SC-CS'],
+                ['name' => 'Warehouse', 'code' => 'SC-WH'],
+                ['name' => 'Key Accounts', 'code' => 'SC-KA'],
+            ],
+            'SIMBA VIT' => [
+                ['name' => 'Cash Processing', 'code' => 'SV-CP'],
+                ['name' => 'Car Operations', 'code' => 'SV-CO'],
+                ['name' => 'Control Room', 'code' => 'SV-CR'],
+            ],
+            'PUMP' => [
+                ['name' => 'Technical Support', 'code' => 'PUMP-TS'],
+                ['name' => 'Maintenance', 'code' => 'PUMP-MNT'],
+                ['name' => 'Sales', 'code' => 'PUMP-SLS'],
+            ],
+            'SIMBA FOODS' => [
+                ['name' => 'Sales and Marketing', 'code' => 'SF-SM'],
+                ['name' => 'Operations', 'code' => 'SF-OPS'],
+                ['name' => 'Inventory', 'code' => 'SF-INV'],
+            ],
+            'SIMBA MONEY' => [
+                ['name' => 'IT Operations', 'code' => 'SM-IT'],
+                ['name' => 'Business Development', 'code' => 'SM-BD'],
             ],
             'Human Resources' => [
-                ['name' => 'Recruitment Team', 'code' => 'HR-REC'],
-                ['name' => 'Training Team', 'code' => 'HR-TRN'],
+                ['name' => 'Recruitment', 'code' => 'HR-REC'],
+                ['name' => 'Training', 'code' => 'HR-TRN'],
                 ['name' => 'Employee Relations', 'code' => 'HR-ER'],
             ],
-            // Add more teams as needed
+            'Finance' => [
+                ['name' => 'Accounting', 'code' => 'FIN-ACC'],
+                ['name' => 'Payroll', 'code' => 'FIN-PAY'],
+                ['name' => 'Budget', 'code' => 'FIN-BDG'],
+            ],
         ];
 
         $teamList = $teams[$department->name] ?? [];
@@ -131,7 +156,7 @@ class OrganizationUnitSeeder extends Seeder
                 'is_active' => true,
                 'level' => 3,
                 'order_index' => $index + 1,
-                'max_headcount' => rand(5, 15),
+                'max_headcount' => rand(5, 25),
                 'current_headcount' => 0,
             ]);
         }

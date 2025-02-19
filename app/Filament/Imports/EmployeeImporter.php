@@ -99,7 +99,6 @@ class EmployeeImporter extends Importer
             $data['employment_status'] = 'ACTIVE';
             $data['terms_of_employment'] = 'full-time';
 
-
             // Ensure department and job title are correctly mapped
             $department = Department::firstOrCreate(
                 ['name' => $data['department']],
@@ -111,16 +110,24 @@ class EmployeeImporter extends Importer
                 ]
             );
 
-            $jobTitle = JobTitle::firstOrCreate(
-                [
+            // First try to find existing job title by name only
+            $jobTitle = JobTitle::where('name', $data['job_title'])->first();
+
+            if (!$jobTitle) {
+                // Create new job title if it doesn't exist
+                $jobTitle = JobTitle::create([
                     'name' => $data['job_title'],
-                    'department_id' => $department->id
-                ],
-                [
+                    'department_id' => $department->id,
                     'is_active' => true,
                     'description' => "Position of {$data['job_title']}"
-                ]
-            );
+                ]);
+            } else {
+                // Update department if needed
+                if ($jobTitle->department_id !== $department->id) {
+                    $jobTitle->department_id = $department->id;
+                    $jobTitle->save();
+                }
+            }
 
             // Remove original text fields
             unset($data['department']);
@@ -141,7 +148,7 @@ class EmployeeImporter extends Importer
             throw new \Exception('Import failed: ' . $th->getMessage());
         }
 
-        return $data; // ✅ Now Filament will actually use this modified data
+        return $data;
     }
 
     function arrayToEmployeeModel(array $data): Employee

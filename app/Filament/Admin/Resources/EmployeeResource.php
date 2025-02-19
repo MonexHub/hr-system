@@ -90,6 +90,10 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->preload(true)
                                                 ->required(),
 
+                                            Forms\Components\TextInput::make('branch')
+                                                ->dehydrated()
+                                                ->required(),
+
                                             Forms\Components\DatePicker::make('birthdate')
                                                 ->required()
                                                 ->maxDate(now()->subYears(18))
@@ -330,6 +334,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->searchable()
                     ->sortable()
                     ->visible(fn() => auth()->user()->can('view_any_department')),
+                Tables\Columns\TextColumn::make('branch')
+                    ->searchable()
+                    ->sortable()
+                    ->visible(fn() => auth()->user()->can('view_any_department')),
+
 
                 Tables\Columns\TextColumn::make('employment_status')
                     ->badge()
@@ -479,10 +488,9 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->visible(fn() => auth()->user()->can('export_employee')),
             ])
             ->headerActions([
-                ImportAction::make()
-                ->importer(EmployeeImporter::class)
-                ->color('warning')
-                ->visible(fn() => auth()->user()->can('import_employee')),
+//                ImportAction::make()
+//                ->importer(EmployeeImporter::class)
+//                ->visible(fn() => auth()->user()->can('import_employee')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

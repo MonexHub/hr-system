@@ -61,7 +61,7 @@ class DepartmentResource extends Resource
                     ->schema([
                         Forms\Components\TextInput::make('annual_budget')
                             ->numeric()
-                            ->prefix('$')
+                            ->prefix('TSH')
                             ->mask('999999999999'),
                         Forms\Components\TextInput::make('current_headcount')
                             ->numeric()
@@ -100,7 +100,7 @@ class DepartmentResource extends Resource
                 Tables\Columns\TextColumn::make('max_headcount')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('annual_budget')
-                    ->money()
+                    ->money('TZS')
                     ->sortable(),
                 Tables\Columns\IconColumn::make('is_active')
                     ->boolean()
