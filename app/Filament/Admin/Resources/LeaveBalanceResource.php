@@ -2,156 +2,305 @@
 
 namespace App\Filament\Admin\Resources;
 
-use App\Filament\Admin\Resources\EmployeeResource\RelationManagers\LeaveRequestsRelationManager;
 use App\Filament\Admin\Resources\LeaveBalanceResource\Pages;
 use App\Models\LeaveBalance;
 use Filament\Forms;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class LeaveBalanceResource extends Resource
 {
     protected static ?string $model = LeaveBalance::class;
     protected static ?string $navigationIcon = 'heroicon-o-calculator';
-
     protected static ?string $navigationGroup = 'Leave Management';
-    protected static ?string $navigationLabel = 'Leave Balances';
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 3;
+    protected static ?string $modelLabel = 'Leave Balance';
+    protected static ?string $pluralModelLabel = 'Leave Balances';
+
+    protected static function isAdmin(): bool
+    {
+        return auth()->user()->hasAnyRole(['super_admin', 'hr_manager']);
+    }
 
     public static function form(Form $form): Form
     {
-        return $form
-            ->schema([
-                Forms\Components\Section::make('Leave Balance Details')
-                    ->schema([
-                        Forms\Components\Select::make('employee_id')
-                            ->relationship('employee', 'first_name')
-                            ->getOptionLabelFromRecordUsing(fn ($record) => $record->first_name . ' ' . $record->last_name)
-                            ->searchable()
-                            ->preload()
-                            ->required() // Ensure this is set to required
-                            ->label('Employee'),
+        $isAdmin = static::isAdmin();
 
-                        Forms\Components\Select::make('leave_type_id')
-                            ->relationship('leaveType', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->label('Leave Type'),
+        return $form->schema([
+            Section::make('Employee Information')
+                ->description('Select the employee and leave type')
+                ->schema([
+                    Forms\Components\Select::make('employee_id')
+                        ->relationship(
+                            'employee',
+                            'first_name',
+                            fn ($query) => $query->select(['id', 'first_name', 'last_name'])
+                                ->orderBy('first_name')
+                        )
+                        ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name}")
+                        ->searchable(['first_name', 'last_name'])
+                        ->preload()
+                        ->required()
+                        ->label('Employee')
+                        ->disabled(fn ($record) => $record !== null || !$isAdmin)
+                        ->default(fn () => $isAdmin ? null : auth()->user()->employee?->id),
 
-                        Forms\Components\Grid::make(3)
-                            ->schema([
-                                Forms\Components\TextInput::make('total_days')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->label('Total Leave Days'),
+                    Forms\Components\Select::make('leave_type_id')
+                        ->relationship('leaveType', 'name', fn ($query) => $query->where('is_active', true))
+                        ->searchable()
+                        ->preload()
+                        ->required()
+                        ->label('Leave Type')
+                        ->disabled(fn ($record) => $record !== null),
 
-                                Forms\Components\TextInput::make('days_taken')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->default(0)
-                                    ->label('Days Used'),
+                    Forms\Components\Select::make('year')
+                        ->options(fn () => array_combine(
+                            range(date('Y') - 1, date('Y') + 1),
+                            range(date('Y') - 1, date('Y') + 1)
+                        ))
+                        ->default(date('Y'))
+                        ->required()
+                        ->disabled(fn ($record) => $record !== null),
+                ]),
 
-                                Forms\Components\TextInput::make('days_remaining')
-                                    ->required()
-                                    ->numeric()
-                                    ->minValue(0)
-                                    ->label('Remaining Days'),
-                            ]),
+            Section::make('Balance Details')
+                ->description('Configure the leave balance details')
+                ->schema([
+                    Forms\Components\Grid::make(3)
+                        ->schema([
+                            Forms\Components\TextInput::make('entitled_days')
+                                ->label('Entitled Days')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->step(0.5)
+                                ->disabled(!$isAdmin),
 
-                        Forms\Components\TextInput::make('year')
-                            ->required()
-                            ->numeric()
-                            ->default(date('Y'))
-                            ->minValue(2000)
-                            ->maxValue(2099)
-                            ->label('Applicable Year'),
-                    ])
-                    ->columns(2)
-            ]);
+                            Forms\Components\TextInput::make('carried_forward_days')
+                                ->label('Carried Forward')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->step(0.5)
+                                ->disabled(!$isAdmin),
+
+                            Forms\Components\TextInput::make('additional_days')
+                                ->label('Additional Days')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->step(0.5)
+                                ->disabled(!$isAdmin),
+                        ]),
+
+                    Forms\Components\Grid::make(2)
+                        ->schema([
+                            Forms\Components\TextInput::make('taken_days')
+                                ->label('Taken Days')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->disabled()
+                                ->step(0.5),
+
+                            Forms\Components\TextInput::make('pending_days')
+                                ->label('Pending Days')
+                                ->required()
+                                ->numeric()
+                                ->minValue(0)
+                                ->default(0)
+                                ->disabled()
+                                ->step(0.5),
+                        ]),
+
+                    Forms\Components\Textarea::make('remarks')
+                        ->maxLength(1000)
+                        ->columnSpanFull()
+                        ->disabled(!$isAdmin),
+                ]),
+
+            Section::make('Balance Summary')
+                ->description('Current balance information')
+                ->schema([
+                    Forms\Components\Placeholder::make('total_entitlement')
+                        ->label('Total Entitlement')
+                        ->content(fn (LeaveBalance $record) => $record?->total_entitlement ?? 0),
+
+                    Forms\Components\Placeholder::make('available_balance')
+                        ->label('Available Balance')
+                        ->content(fn (LeaveBalance $record) => $record?->available_balance ?? 0),
+                ])
+                ->visible(fn ($record) => $record !== null),
+        ]);
     }
 
     public static function table(Table $table): Table
     {
+        $isAdmin = static::isAdmin();
+
         return $table
+            ->defaultSort('created_at', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('employee')
+                Tables\Columns\TextColumn::make('employee.first_name')
                     ->label('Employee')
                     ->formatStateUsing(fn ($record) => $record->employee->first_name . ' ' . $record->employee->last_name)
-                    ->searchable(['employee.first_name', 'employee.last_name'])
-                    ->sortable(),
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->whereHas('employee', function ($query) use ($search) {
+                            $query->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%");
+                        });
+                    })
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->orderBy('employee.first_name', $direction)
+                            ->orderBy('employee.last_name', $direction);
+                    })
+                    ->visible($isAdmin),
 
                 Tables\Columns\TextColumn::make('leaveType.name')
                     ->label('Leave Type')
                     ->searchable()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('total_days')
-                    ->label('Total Days')
-                    ->numeric()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('days_taken')
-                    ->label('Days Used')
-                    ->numeric()
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('days_remaining')
-                    ->label('Remaining Days')
-                    ->numeric()
-                    ->sortable()
-                    ->color(fn (int $state): string => $state > 0 ? 'success' : 'danger'),
-
                 Tables\Columns\TextColumn::make('year')
-                    ->label('Year')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Last Updated')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('entitled_days')
+                    ->label('Entitled')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    ),
+
+                Tables\Columns\TextColumn::make('carried_forward_days')
+                    ->label('Carried Forward')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    )
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('additional_days')
+                    ->label('Additional')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    )
+                    ->toggleable(),
+
+                Tables\Columns\TextColumn::make('taken_days')
+                    ->label('Taken')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    ),
+
+                Tables\Columns\TextColumn::make('pending_days')
+                    ->label('Pending')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    ),
+
+                Tables\Columns\TextColumn::make('available_balance')
+                    ->label('Available')
+                    ->numeric(
+                        decimalPlaces: 1,
+                        thousandsSeparator: ',',
+                    )
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->orderByRaw('(entitled_days + carried_forward_days + additional_days - taken_days - pending_days) ' . $direction);
+                    }),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('employee')
-                    ->relationship('employee', 'first_name')
-                    ->label('Filter by Employee')
-                    ->getOptionLabelFromRecordUsing(fn ($record) => $record->first_name . ' ' . $record->last_name),
+                SelectFilter::make('employee')
+                    ->relationship(
+                        'employee',
+                        'first_name',
+                        fn ($query) => $query->select(['id', 'first_name', 'last_name'])
+                            ->orderBy('first_name')
+                    )
+                    ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->first_name} {$record->last_name}")
+                    ->searchable(['first_name', 'last_name'])
+                    ->preload()
+                    ->visible($isAdmin),
 
-                Tables\Filters\SelectFilter::make('leave_type')
+                SelectFilter::make('leave_type')
                     ->relationship('leaveType', 'name')
-                    ->label('Filter by Leave Type'),
+                    ->searchable()
+                    ->preload(),
 
-                Tables\Filters\SelectFilter::make('year')
-                    ->options(array_combine(
-                        range(date('Y')-2, date('Y')+2),
-                        range(date('Y')-2, date('Y')+2)
-                    ))
-                    ->label('Filter by Year'),
+                SelectFilter::make('year')
+                    ->options(fn () => array_combine(
+                        range(date('Y') - 1, date('Y') + 1),
+                        range(date('Y') - 1, date('Y') + 1)
+                    )),
+
+                Tables\Filters\Filter::make('with_balance')
+                    ->query(fn (Builder $query): Builder => $query->withAvailableBalance())
+                    ->label('Has Available Balance')
+                    ->toggle(),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\DeleteAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\EditAction::make()
+                    ->visible($isAdmin),
+                Tables\Actions\Action::make('adjust')
+                    ->icon('heroicon-o-plus-circle')
+                    ->visible($isAdmin)
+                    ->form([
+                        Forms\Components\TextInput::make('days')
+                            ->required()
+                            ->numeric()
+                            ->step(0.5)
+                            ->label('Number of Days'),
+
+                        Forms\Components\Textarea::make('reason')
+                            ->required()
+                            ->label('Reason for Adjustment'),
+                    ])
+                    ->action(function (LeaveBalance $record, array $data): void {
+                        $record->additional_days += $data['days'];
+                        $record->remarks = ($record->remarks ? $record->remarks . "\n" : '') .
+                            "Adjusted by " . auth()->user()->name . ": {$data['days']} days - {$data['reason']}";
+                        $record->save();
+
+                        Notification::make()
+                            ->title('Balance Adjusted')
+                            ->success()
+                            ->send();
+                    }),
             ]);
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery()
+            ->with(['employee', 'leaveType'])
+            ->whereHas('employee')
+            ->whereHas('leaveType');
+
+        if (!static::isAdmin()) {
+            $query->where('employee_id', auth()->user()->employee?->id);
+        }
+
+        return $query;
     }
 
     public static function getRelations(): array
     {
-        return [
-         LeaveRequestsRelationManager::class
-        ];
+        return [];
     }
 
     public static function getPages(): array
@@ -163,13 +312,18 @@ class LeaveBalanceResource extends Resource
         ];
     }
 
-    public static function getNavigationBadge(): ?string
+    public static function canCreate(): bool
     {
-        return self::$model::count();
+        return static::isAdmin();
     }
 
-    public static function getNavigationBadgeColor(): ?string
+    public static function canEdit(Model $record): bool
     {
-        return 'primary';
+        return static::isAdmin();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return static::isAdmin();
     }
 }

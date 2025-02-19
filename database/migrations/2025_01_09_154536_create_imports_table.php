@@ -13,14 +13,16 @@ return new class extends Migration
     {
         Schema::create('imports', function (Blueprint $table) {
             $table->id();
-            $table->timestamp('completed_at')->nullable();
+            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('file_name');
             $table->string('file_path');
             $table->string('importer');
+            $table->unsignedInteger('total_rows')->default(0);
             $table->unsignedInteger('processed_rows')->default(0);
-            $table->unsignedInteger('total_rows');
             $table->unsignedInteger('successful_rows')->default(0);
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->unsignedInteger('failed_rows')->default(0);
+            $table->json('failed_rows_data')->nullable();
+            $table->timestamp('completed_at')->nullable();
             $table->timestamps();
         });
     }

@@ -3,154 +3,183 @@
 namespace App\Notifications;
 
 use App\Models\LeaveRequest;
-use Filament\Notifications\Actions\Action;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Carbon;
 use Filament\Notifications\Notification as FilamentNotification;
 
-class LeaveRequestNotification extends Notification implements ShouldQueue
+class LeaveRequestNotification extends Notification
 {
     use Queueable;
 
-    public function __construct(
-        protected LeaveRequest $leaveRequest,
-        protected string $type
-    ) {}
+    protected LeaveRequest $leaveRequest;
+    protected string $type;
+    protected ?string $remarks;
 
-    public function via(object $notifiable): array
+    public const TYPE_PENDING_HOD = 'pending_hod';
+    public const TYPE_PENDING_HR = 'pending_hr';
+    public const TYPE_PENDING_CEO = 'pending_ceo';
+    public const TYPE_APPROVED = 'approved';
+    public const TYPE_REJECTED = 'rejected';
+    public const TYPE_CANCELLED = 'cancelled';
+
+    public function __construct(LeaveRequest $leaveRequest, string $type, ?string $remarks = null)
+    {
+        $this->leaveRequest = $leaveRequest;
+        $this->type = $type;
+        $this->remarks = $remarks;
+
+        $this->leaveRequest->loadMissing(['employee', 'employee.user', 'leaveType']);
+    }
+
+    public function via($notifiable): array
     {
         return ['mail', 'database'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    public function toMail($notifiable): MailMessage
     {
-        return match($this->type) {
-            'new_request' => $this->newRequestMail(),
-            'manager_approval' => $this->managerApprovalMail(),
-            'status_update' => $this->statusUpdateMail(),
-            'request_rejected' => $this->rejectedMail(),
-            default => $this->defaultMail(),
-        };
+        $employee = $this->leaveRequest->employee;
+
+        try {
+            $mailContent = $this->prepareMailContent($employee);
+            return $this->buildMailMessage($mailContent);
+        } catch (\Exception $e) {
+            report($e);
+            return $this->buildFallbackMailMessage();
+        }
     }
 
-    protected function newRequestMail(): MailMessage
+    protected function prepareMailContent($employee): array
     {
-        return (new MailMessage)
-            ->subject('🔔 New Leave Request: Action Required')
-            ->greeting("Hello {$this->leaveRequest->employee->reportingTo->first_name},")
-            ->line("**Action Required**: New leave request submitted by {$this->leaveRequest->employee->full_name}")
-            ->line("**Request Details:**")
-            ->line("• Leave Type: {$this->leaveRequest->leaveType->name}")
-            ->line("• Period: {$this->leaveRequest->start_date->format('D, d M Y')} - {$this->leaveRequest->end_date->format('D, d M Y')}")
-            ->line("• Days Requested: {$this->leaveRequest->days_taken} days")
-            ->line("• Reason: {$this->leaveRequest->reason}")
-            ->action('Review Request', url("/admin/leave-requests/{$this->leaveRequest->id}"))
-            ->line("Please review and take action on this request.");
-    }
+        $startDate = Carbon::parse($this->leaveRequest->start_date)->format('F d, Y');
+        $endDate = Carbon::parse($this->leaveRequest->end_date)->format('F d, Y');
 
-    protected function managerApprovalMail(): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('👥 Leave Request: Manager Approved - HR Review Required')
-            ->greeting("Hello HR Team,")
-            ->line("A leave request has been approved by the line manager and requires HR review")
-            ->line("**Request Details:**")
-            ->line("• Employee: {$this->leaveRequest->employee->full_name}")
-            ->line("• Department: {$this->leaveRequest->employee->department->name}")
-            ->line("• Approved By: {$this->leaveRequest->managerApprover->name}")
-            ->action('Review Request', url("/admin/leave-requests/{$this->leaveRequest->id}"));
-    }
-
-    protected function statusUpdateMail(): MailMessage
-    {
-        $status = match($this->leaveRequest->status) {
-            'approved' => '✅ Approved',
-            'rejected' => '❌ Rejected',
-            default => $this->leaveRequest->status
-        };
-
-        return (new MailMessage)
-            ->subject("Leave Request {$status}")
-            ->greeting("Hello {$this->leaveRequest->employee->first_name},")
-            ->line("Your leave request has been {$this->leaveRequest->status}")
-            ->line("**Request Details:**")
-            ->line("• Leave Type: {$this->leaveRequest->leaveType->name}")
-            ->line("• Period: {$this->leaveRequest->start_date->format('D, d M Y')} - {$this->leaveRequest->end_date->format('D, d M Y')}")
-            ->when($this->leaveRequest->rejection_reason, function (MailMessage $mail) {
-                return $mail->line("• Rejection Reason: {$this->leaveRequest->rejection_reason}");
-            })
-            ->action('View Details', url("/employee/leave-requests/{$this->leaveRequest->id}"));
-    }
-
-    protected function rejectedMail(): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('Leave Request Rejected')
-            ->line("A leave request for {$this->leaveRequest->employee->full_name} has been rejected.")
-            ->line("Reason: {$this->leaveRequest->rejection_reason}")
-            ->action('View Details', url("/admin/leave-requests/{$this->leaveRequest->id}"));
-    }
-
-    protected function defaultMail(): MailMessage
-    {
-        return (new MailMessage)
-            ->subject('Leave Request Update')
-            ->line('There has been an update to a leave request.')
-            ->action('View Request', url("/admin/leave-requests/{$this->leaveRequest->id}"));
-    }
-
-    public function toDatabase(object $notifiable): array
-    {
         return [
-            'leave_request_id' => $this->leaveRequest->id,
-            'type' => $this->type,
-            'message' => match($this->type) {
-                'new_request' => "New leave request from {$this->leaveRequest->employee->full_name}",
-                'manager_approval' => "Leave request approved by manager for {$this->leaveRequest->employee->full_name}",
-                'status_update' => "Your leave request has been {$this->leaveRequest->status}",
-                'request_rejected' => "Leave request for {$this->leaveRequest->employee->full_name} was rejected",
-                default => 'Leave request update',
-            },
+            'employeeName' => $employee->full_name,
+            'leaveType' => $this->leaveRequest->leaveType->name,
+            'duration' => [
+                'days' => $this->leaveRequest->total_days,
+                'start' => $startDate,
+                'end' => $endDate
+            ],
+            'reason' => $this->leaveRequest->reason,
+            'status' => $this->getRequestStatusDetails($employee->full_name)
         ];
     }
 
-    public function toFilament(object $notifiable): ?FilamentNotification
+    protected function buildMailMessage(array $content): MailMessage
     {
-        return FilamentNotification::make()
-            ->title(match($this->type) {
-                'new_request' => 'New Leave Request',
-                'manager_approval' => 'Manager Approved Leave Request',
-                'status_update' => 'Leave Request Update',
-                'request_rejected' => 'Leave Request Rejected',
-                default => 'Leave Request Notification',
-            })
-            ->body($this->getDatabaseMessage())
-            ->actions([
-              Action::make('view')
-                    ->button()
-                    ->url(route('filament.admin.resources.leave-requests.view', [
-                        'record' => $this->leaveRequest->id,
-                    ])),
-            ])
-            ->status(match($this->type) {
-                'new_request' => 'warning',
-                'manager_approval' => 'info',
-                'status_update' => $this->leaveRequest->status === 'approved' ? 'success' : 'danger',
-                'request_rejected' => 'danger',
-                default => 'info',
-            });
+        $message = (new MailMessage)
+            ->subject($content['status']['subject'])
+            ->greeting("Dear {$content['employeeName']},")
+            ->line($content['status']['line']);
+
+        // Add leave request details
+        $message->line("\nLeave Request Details:")
+            ->line("**Leave Type:** {$content['leaveType']}")
+            ->line("**Duration:** {$content['duration']['days']} days")
+            ->line("**Period:** {$content['duration']['start']} to {$content['duration']['end']}")
+            ->line("**Reason:** {$content['reason']}");
+
+        // Add remarks only if they exist and for specific status types
+        if ($this->remarks && in_array($this->type, [self::TYPE_REJECTED, self::TYPE_CANCELLED])) {
+            $message->line("\n**Remarks:** {$this->remarks}");
+        }
+
+        $message->action(
+            'View Leave Request',
+            url("/admin/leave-requests/{$this->leaveRequest->id}")
+        );
+
+        // Add footer message
+        $message->line($this->getFooterMessage());
+
+        return $message;
     }
 
-    protected function getDatabaseMessage(): string
+    protected function buildFallbackMailMessage(): MailMessage
     {
-        return match($this->type) {
-            'new_request' => "New leave request from {$this->leaveRequest->employee->full_name}",
-            'manager_approval' => "Leave request approved by manager for {$this->leaveRequest->employee->full_name}",
-            'status_update' => "Your leave request has been {$this->leaveRequest->status}",
-            'request_rejected' => "Leave request for {$this->leaveRequest->employee->full_name} was rejected",
-            default => 'Leave request update',
-        };
+        return (new MailMessage)
+            ->error()
+            ->subject('Leave Request System Notification')
+            ->greeting('Important Notice')
+            ->line('There has been an update to your leave request.')
+            ->line('Please log into the system to view the details.');
+    }
+
+    protected function getRequestStatusDetails(string $employeeName): array
+    {
+        $statusMap = [
+            self::TYPE_PENDING_HOD => [
+                'subject' => 'Leave Request Submitted - Pending Department Head Review',
+                'line' => "Your leave request has been submitted and is awaiting approval from your Department Head."
+            ],
+            self::TYPE_PENDING_HR => [
+                'subject' => 'Leave Request Update - Under HR Review',
+                'line' => "Your leave request has been approved by your Department Head and is now under HR review."
+            ],
+            self::TYPE_PENDING_CEO => [
+                'subject' => 'Leave Request Update - Awaiting CEO Approval',
+                'line' => "Your leave request has been reviewed by HR and is now awaiting CEO approval."
+            ],
+            self::TYPE_APPROVED => [
+                'subject' => 'Leave Request Approved',
+                'line' => "Your leave request has been approved and processed."
+            ],
+            self::TYPE_REJECTED => [
+                'subject' => 'Leave Request Not Approved',
+                'line' => "Your leave request has not been approved."
+            ],
+            self::TYPE_CANCELLED => [
+                'subject' => 'Leave Request Cancelled',
+                'line' => "Your leave request has been cancelled."
+            ]
+        ];
+
+        return $statusMap[$this->type] ?? [
+            'subject' => 'Leave Request Status Update',
+            'line' => 'There has been an update to your leave request.'
+        ];
+    }
+
+    protected function getFooterMessage(): string
+    {
+        $messages = [
+            self::TYPE_APPROVED => 'Please ensure proper handover of your responsibilities before your leave period.',
+            self::TYPE_REJECTED => 'If you have any questions about this decision, please discuss with your supervisor.',
+            self::TYPE_CANCELLED => 'You may submit a new leave request if needed.',
+            'default' => 'You will be notified of any updates to your request.'
+        ];
+
+        return $messages[$this->type] ?? $messages['default'];
+    }
+
+    public function toArray($notifiable): array
+    {
+        return [
+            'leave_request_id' => $this->leaveRequest->id,
+            'request_number' => $this->leaveRequest->request_number,
+            'employee_name' => $this->leaveRequest->employee->full_name,
+            'type' => $this->type,
+            'message' => $this->getNotificationMessage($this->leaveRequest->employee->full_name),
+            'remarks' => $this->remarks,
+            'created_at' => now()->toDateTimeString()
+        ];
+    }
+
+    protected function getNotificationMessage(string $employeeName): string
+    {
+        $messages = [
+            self::TYPE_PENDING_HOD => "Leave request from {$employeeName} is pending Department Head review",
+            self::TYPE_PENDING_HR => "Leave request from {$employeeName} is under HR review",
+            self::TYPE_PENDING_CEO => "Leave request from {$employeeName} is awaiting CEO approval",
+            self::TYPE_APPROVED => "Leave request for {$employeeName} has been approved",
+            self::TYPE_REJECTED => "Leave request for {$employeeName} was not approved",
+            self::TYPE_CANCELLED => "Leave request for {$employeeName} has been cancelled"
+        ];
+
+        return $messages[$this->type] ?? "Leave request status updated for {$employeeName}";
     }
 }

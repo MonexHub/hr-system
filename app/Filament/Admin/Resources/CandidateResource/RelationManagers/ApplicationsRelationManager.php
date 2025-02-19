@@ -10,6 +10,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class ApplicationsRelationManager extends RelationManager
 {
@@ -154,7 +155,7 @@ class ApplicationsRelationManager extends RelationManager
                 Tables\Actions\DeleteAction::make(),
                 Tables\Actions\Action::make('download_cv')
                     ->icon('heroicon-o-document-arrow-down')
-                    ->url(fn (Model $record) => $record->cover_letter_path ? storage_url($record->cover_letter_path) : null)
+                    ->url(fn (Model $record) => $record->cover_letter_path ? Storage::url($record->cover_letter_path) : null)
                     ->openUrlInNewTab()
                     ->visible(fn (Model $record) => $record->cover_letter_path !== null),
                 Tables\Actions\Action::make('schedule_interview')

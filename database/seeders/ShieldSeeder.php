@@ -23,14 +23,19 @@ class ShieldSeeder extends Seeder
                 )
             ],
             [
+                'name' => 'chief_executive_officer',
+                'guard_name' => 'web',
+                'permissions' => $this->getCeoPermissions()
+            ],
+            [
                 'name' => 'hr_manager',
                 'guard_name' => 'web',
                 'permissions' => $this->getHrManagerPermissions()
             ],
             [
-                'name' => 'department_manager',
+                'name' => 'department_head',
                 'guard_name' => 'web',
-                'permissions' => $this->getDepartmentManagerPermissions()
+                'permissions' => $this->getDepartmentHeadPermissions()
             ],
             [
                 'name' => 'employee',
@@ -43,84 +48,116 @@ class ShieldSeeder extends Seeder
 
         static::makeRolesWithPermissions($rolesWithPermissions);
         static::makeDirectPermissions($directPermissions);
-
-        $this->command->info('Shield Seeding Completed.');
     }
 
     protected function getAdminPanelPermissions(): array
     {
-        $resources = [
-            'role' => ['view', 'view_any', 'create', 'update', 'delete', 'delete_any'],
-            'employee' => ['view', 'view_any', 'create', 'update', 'delete', 'delete_any',
-                'export', 'import', 'manage_roles'],
-            'department' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'organization::unit' => ['view', 'view_any', 'create', 'update', 'restore',
-                'restore_any', 'replicate', 'reorder', 'delete', 'delete_any',
-                'force_delete', 'force_delete_any'],
-            'leave::type' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'leave::request' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any',   'approve_manager', 'reject', 'create_for_others',
-                        ],
-            'leave::balance' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'job::posting' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'job::application' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'job::offer' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'job::title' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any'],
-            'interview::schedule' => ['view', 'view_any', 'create', 'update', 'restore',
-                'restore_any', 'replicate', 'reorder', 'delete', 'delete_any',
-                'force_delete', 'force_delete_any'],
-            'candidate' => ['view', 'view_any', 'create', 'update', 'restore', 'restore_any',
-                'replicate', 'reorder', 'delete', 'delete_any', 'force_delete',
-                'force_delete_any']
+        return [
+            // User Management
+            'view_user',
+            'view_any_user',
+            'create_user',
+            'update_user',
+            'delete_user',
+            'delete_any_user',
+
+            // Employee Management
+            'view_employee',
+            'view_any_employee',
+            'create_employee',
+            'update_employee',
+            'delete_employee',
+            'delete_any_employee',
+            'export_employee',
+            'import_employee',
+
+            // Organization Management
+            'view_organization_unit',
+            'view_any_organization_unit',
+            'create_organization_unit',
+            'update_organization_unit',
+            'delete_organization_unit',
+
+            'view_department',
+            'view_any_department',
+            'create_department',
+            'update_department',
+            'delete_department',
+
+            // Leave Management
+            'view_leave_type',
+            'view_any_leave_type',
+            'create_leave_type',
+            'update_leave_type',
+            'delete_leave_type',
+
+            'view_leave_request',
+            'view_any_leave_request',
+            'create_leave_request',
+            'update_leave_request',
+            'delete_leave_request',
+            'manage_all_leave_requests',
+
+            // Settings
+            'manage_system_settings',
+            'manage_roles',
+            'manage_permissions'
         ];
-
-        $permissions = [];
-        foreach ($resources as $resource => $actions) {
-            foreach ($actions as $action) {
-                $permissions[] = "${action}_${resource}";
-            }
-        }
-
-        return $permissions;
     }
 
     protected function getEmployeePanelPermissions(): array
     {
         return [
-            'view_profile', 'view_any_profile', 'create_profile', 'update_profile',
-            'restore_profile', 'restore_any_profile', 'replicate_profile',
-            'reorder_profile', 'delete_profile', 'delete_any_profile',
-            'force_delete_profile', 'force_delete_any_profile',
+            // Profile Management
+            'view_profile',
+            'update_profile',
+            'view_documents',
+            'upload_documents',
 
-            'view_employee::leave::request', 'view_any_employee::leave::request',
-            'create_employee::leave::request', 'update_employee::leave::request',
-            'restore_employee::leave::request', 'restore_any_employee::leave::request',
-            'replicate_employee::leave::request', 'reorder_employee::leave::request',
-            'delete_employee::leave::request', 'delete_any_employee::leave::request',
-            'force_delete_employee::leave::request', 'force_delete_any_employee::leave::request'
+            // Leave Management
+            'view_own_leave_requests',
+            'create_leave_request',
+            'cancel_own_leave_request',
+            'view_leave_balance',
+
+            // Time Management
+            'view_attendance',
+            'view_timesheet',
+            'create_timesheet',
+            'update_timesheet',
+
+            // Performance
+            'view_own_performance',
+            'view_own_goals',
+            'create_goal',
+            'update_goal'
         ];
     }
 
-    protected function getPagePermissions(): array
+    protected function getCeoPermissions(): array
     {
         return [
-            'page_OrganizationStructure',
-            'page_CompleteProfile'
+            // Organization Overview
+            'view_organization_dashboard',
+            'view_department_reports',
+            'view_employee_reports',
+
+            // Leave Management
+            'view_leave_request',
+            'view_any_leave_request',
+            'approve_ceo_leave_request',
+            'reject_leave_request',
+            'view_leave_reports',
+
+            // Performance Management
+            'view_performance_dashboard',
+            'view_any_performance_review',
+            'approve_performance_review',
+
+            // Employee Overview
+            'view_employee',
+            'view_any_employee',
+            'view_employee_statistics'
         ];
     }
 
@@ -128,69 +165,88 @@ class ShieldSeeder extends Seeder
     {
         return [
             // Employee Management
-            'view_employee', 'view_any_employee', 'create_employee', 'update_employee',
-            'export_employee', 'import_employee',
-
-            // Department Management
-            'view_department', 'view_any_department', 'create_department', 'update_department',
+            'view_employee',
+            'view_any_employee',
+            'create_employee',
+            'update_employee',
+            'manage_employee_documents',
 
             // Leave Management
-            'view_leave::type', 'view_any_leave::type', 'create_leave::type', 'update_leave::type',
-            'view_leave::request', 'view_any_leave::request', 'create_leave::request',
-            'view_leave::balance', 'view_any_leave::balance', 'update_leave::balance',
-            'approve_leave_request',
-            'reject_leave::request',
-            'create_for_others_leave::request',
+            'view_leave_request',
+            'view_any_leave_request',
+            'approve_hr_leave_request',
+            'reject_leave_request',
+            'manage_leave_balance',
 
+            // Organization Management
+            'view_department',
+            'view_any_department',
+            'manage_job_titles',
+            'manage_positions',
 
-            // Recruitment
-            'view_job::posting', 'view_any_job::posting', 'create_job::posting',
-            'view_candidate', 'view_any_candidate', 'create_candidate',
-            'view_job::application', 'view_any_job::application',
-            'view_interview::schedule', 'view_any_interview::schedule',
-            'view_job::offer', 'view_any_job::offer', 'create_job::offer',
-
-            'page_OrganizationStructure'
+            // Reporting
+            'view_hr_dashboard',
+            'generate_hr_reports',
+            'export_employee_data'
         ];
     }
 
-    protected function getDepartmentManagerPermissions(): array
+    protected function getDepartmentHeadPermissions(): array
     {
         return [
-            // Employee Access
-            'view_employee', 'view_any_employee',
+            // Department Management
+            'view_department_dashboard',
+            'view_department_employees',
+            'manage_department_schedule',
+
 
             // Leave Management
-            'view_leave::request', 'view_any_leave::request',
-            'view_leave::balance', 'view_any_leave::balance',
+            'view_department_leave_requests',
+            'approve_department_leave_request',
+            'reject_department_leave_request',
+            'view_leave_request',
+            'view_any_leave_request',
+            'approve_leave_request',
+            'reject_leave_request',
+            'view_department_leave_calendar',
 
-            'approve_manager_leave::request',  //
-            'reject_leave::request',          //
-
-            // Limited Recruitment Access
-            'view_job::posting', 'view_any_job::posting',
-            'view_job::application', 'view_any_job::application',
-            'view_interview::schedule', 'view_any_interview::schedule',
-
-            'page_OrganizationStructure'
+            // Team Management
+            'view_team_attendance',
+            'view_team_performance',
+            'manage_team_goals'
         ];
     }
 
     protected function getEmployeePermissions(): array
     {
         return [
-            // Profile Management
-            'view_profile', 'view_any_profile', 'update_profile',
-            'page_CompleteProfile',
+            // Profile
+            'view_profile',
+            'update_profile',
+            'view_documents',
 
-            // Leave Management
-            'view_employee::leave::request', 'view_any_employee::leave::request',
-            'create_employee::leave::request',
-            'update_employee::leave::request',
+            // Leave
+            'view_own_leave_requests',
+            'create_leave_request',
+            'cancel_own_leave_request',
+            'view_leave_balance',
 
-            // Job Portal Access
-            'view_job::posting', 'view_any_job::posting'
+            // General Access
+            'view_company_directory',
+            'view_announcements',
+            'view_employee_handbook'
+        ];
+    }
 
+    protected function getPagePermissions(): array
+    {
+        return [
+            'page_Dashboard',
+            'page_Profile',
+            'page_LeaveManagement',
+            'page_Documents',
+            'page_Directory',
+            'page_Settings'
         ];
     }
 
@@ -220,18 +276,16 @@ class ShieldSeeder extends Seeder
         }
     }
 
-    public static function makeDirectPermissions(string $directPermissions): void
+    protected static function makeDirectPermissions(string $directPermissions): void
     {
         if (! blank($permissions = json_decode($directPermissions, true))) {
             $permissionModel = Utils::getPermissionModel();
 
             foreach ($permissions as $permission) {
-                if ($permissionModel::whereName($permission)->doesntExist()) {
-                    $permissionModel::create([
-                        'name' => $permission['name'],
-                        'guard_name' => $permission['guard_name'],
-                    ]);
-                }
+                $permissionModel::firstOrCreate([
+                    'name' => $permission['name'],
+                    'guard_name' => $permission['guard_name'],
+                ]);
             }
         }
     }

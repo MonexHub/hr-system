@@ -86,4 +86,14 @@ class JobOffer extends Model
         $allowances = collect($this->additional_allowances)->sum('amount') ?? 0;
         return $this->base_salary + $allowances;
     }
+
+    static  function booted()
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            if (!$model->created_by) {
+                $model->created_by = auth()->id();
+            }
+        });
+    }
 }

@@ -13,6 +13,7 @@ use App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelation
 use App\Filament\Imports\EmployeeImporter;
 use App\Mail\NewEmployeeAccountSetupMail;
 use App\Models\Employee;
+use App\Models\EmployeeImport;
 use App\Services\BeemService;
 use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
 use Filament\Forms;
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Spatie\Permission\Models\Role;
@@ -85,7 +87,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                     'other' => 'Other',
                                                 ])
                                                 ->searchable()
-                                                ->preload()
+                                                ->preload(true)
+                                                ->required(),
+
+                                            Forms\Components\TextInput::make('branch')
+                                                ->dehydrated()
                                                 ->required(),
 
                                             Forms\Components\DatePicker::make('birthdate')
@@ -101,7 +107,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                     'widowed' => 'Widowed',
                                                 ])
                                                 ->searchable()
-                                                ->preload()
+                                                ->preload(true)
                                         ])
                                         ->columns(2)
                                         ->columnSpan(9)
@@ -117,23 +123,45 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                     Forms\Components\Select::make('department_id')
                                         ->relationship('department', 'name')
                                         ->required()
-                                        ->searchable()
-                                        ->visible(fn() => auth()->user()->can('view_any_department')),
+                                        ->searchable()->preload(true)
+                                        ->visible(fn() => auth()->user()->can('view_any_department'))
+                                        ->live()
+                                        ->afterStateUpdated(function ($state, callable $set) {
+                                            if ($state) {
+                                                // Get the department
+                                                $department = \App\Models\Department::find($state);
+                                                if ($department && $department->manager) {
+                                                    // Find the employee record for the department manager
+                                                    $managerEmployee = \App\Models\Employee::where('user_id', $department->manager_id)->first();
+                                                    if ($managerEmployee) {
+                                                        $set('reporting_to', $managerEmployee->id);
+                                                    }
+                                                }
+                                            }
+                                        }),
 
                                     Forms\Components\Select::make('reporting_to')
                                         ->relationship('reportingTo', 'first_name', function ($query) {
                                             return $query->whereNotNull('appointment_date');
                                         })
                                         ->getOptionLabelFromRecordUsing(fn($record) => $record->full_name)
-                                        ->searchable(),
-
+                                        ->searchable()->preload(true)
+                                        ->visible(fn(callable $get) => !empty($get('department_id'))),
                                     Forms\Components\Select::make('job_title_id')
                                         ->label('Job Title')
-                                        ->relationship('jobTitle', 'name')
+                                        ->options(function (callable $get) {
+                                            $departmentId = $get('department_id');
+                                            if ($departmentId) {
+                                                return \App\Models\JobTitle::where('department_id', $departmentId)
+                                                    ->pluck('name', 'id');
+                                            }
+                                            return [];
+                                        })
                                         ->required()
                                         ->searchable()
-                                        ->preload()
+                                        ->preload(true)
                                         ->live()
+                                        ->visible(fn(callable $get) => !empty($get('department_id')))
                                         ->afterStateUpdated(function ($state, callable $set) {
                                             if ($state) {
                                                 $jobTitle = \App\Models\JobTitle::find($state);
@@ -186,7 +214,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ])
                                         ->required()
                                         ->searchable()
-                                        ->preload()
+                                        ->preload(true)
                                         ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
 
                                     Forms\Components\Select::make('contract_type')
@@ -197,7 +225,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                             'intern' => 'Intern',
                                         ])
                                         ->required()
-                                        ->preload()
+                                        ->preload(true)
                                         ->searchable()
                                         ->reactive()
                                         ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
@@ -267,7 +295,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                     return Role::whereNotIn('name', ['super_admin'])->pluck('name', 'name');
                                                 })
                                                 ->required()
-                                                ->preload()
+                                                ->preload(true)
                                                 ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager']))
                                         ])
                                         ->columns(1)
@@ -299,12 +327,18 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 Tables\Columns\TextColumn::make('full_name')
                     ->searchable(['first_name', 'last_name'])
                     ->sortable(['first_name'])
-                    ->description(fn(Employee $record): string => $record->job_title),
-
+                    ->description(fn(Employee $record): string =>
+                        $record->jobTitle?->name ?? 'No Position'
+                    ),
                 Tables\Columns\TextColumn::make('department.name')
                     ->searchable()
                     ->sortable()
                     ->visible(fn() => auth()->user()->can('view_any_department')),
+                Tables\Columns\TextColumn::make('branch')
+                    ->searchable()
+                    ->sortable()
+                    ->visible(fn() => auth()->user()->can('view_any_department')),
+
 
                 Tables\Columns\TextColumn::make('employment_status')
                     ->badge()
@@ -316,21 +350,17 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                         default => 'gray',
                     })
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
                 Tables\Columns\TextColumn::make('phone_number')
                     ->searchable()
                     ->toggleable(),
-
                 Tables\Columns\TextColumn::make('email')
                     ->searchable()
                     ->toggleable(),
-
                 Tables\Columns\TextColumn::make('appointment_date')
                     ->date('d/m/Y')
                     ->sortable()
                     ->toggleable()
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
-
                 Tables\Columns\IconColumn::make('account_setup')
                     ->label('Account Setup')
                     ->boolean()
@@ -346,7 +376,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 Tables\Filters\SelectFilter::make('department')
                     ->relationship('department', 'name')
                     ->visible(fn() => auth()->user()->can('view_any_department')),
-
                 Tables\Filters\SelectFilter::make('employment_status')
                     ->options([
                         'active' => 'Active',
@@ -433,11 +462,10 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
                             return true;
                         } catch (\Exception $e) {
-                            \Log::error('Failed to send setup instructions', [
+                            Log::error('Failed to send setup instructions', [
                                 'employee_id' => $record->id,
                                 'error' => $e->getMessage()
                             ]);
-
                             throw $e;
                         }
                     })
@@ -460,10 +488,9 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->visible(fn() => auth()->user()->can('export_employee')),
             ])
             ->headerActions([
-                ImportAction::make()
-                    ->importer(EmployeeImporter::class)
-                    ->color('warning')
-                    ->visible(fn() => auth()->user()->can('import_employee')),
+//                ImportAction::make()
+//                ->importer(EmployeeImporter::class)
+//                ->visible(fn() => auth()->user()->can('import_employee')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
@@ -559,7 +586,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
         return auth()->user()->can('create_employee');
     }
 
-
     public static function afterCreate(Model $record): void
     {
         // Generate a random token for account setup
@@ -570,6 +596,13 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
         // Send email to employee
         Mail::to($record->email)->send(new NewEmployeeAccountSetupMail($record, $token));
+    }
+
+    public static function getImports(): array
+    {
+        return [
+            EmployeeImporter::class, // Ensure this is included!
+        ];
     }
 
 

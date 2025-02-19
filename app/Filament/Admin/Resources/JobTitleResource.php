@@ -26,6 +26,12 @@ class JobTitleResource extends Resource
             ->schema([
                 Forms\Components\Grid::make()
                     ->schema([
+                        Forms\Components\Select::make('department_id')
+                            ->relationship('department', 'name')
+                            ->required()
+                            ->searchable()
+                            ->preload(),
+
                         Forms\Components\TextInput::make('name')
                             ->required()
                             ->maxLength(255)
@@ -71,6 +77,11 @@ class JobTitleResource extends Resource
                     ->searchable()
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('department.name')
+                    ->label('Department')
+                    ->searchable()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('description')
                     ->limit(50)
                     ->searchable(),
@@ -91,6 +102,11 @@ class JobTitleResource extends Resource
                     ->trueLabel('Active')
                     ->falseLabel('Inactive')
                     ->placeholder('All'),
+
+                Tables\Filters\SelectFilter::make('department')
+                    ->relationship('department', 'name')
+                    ->searchable()
+                    ->preload(),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
@@ -102,8 +118,6 @@ class JobTitleResource extends Resource
                 ]),
             ]);
     }
-
-
     public static function getRelations(): array
     {
         return [

@@ -3,6 +3,7 @@
 namespace App\Filament\Admin\Resources\JobApplicationResource\Pages;
 
 use App\Filament\Admin\Resources\JobApplicationResource;
+use App\Notifications\RecruitmentNotification;
 use Filament\Actions;
 use Filament\Infolists;
 use Filament\Infolists\Infolist;
@@ -19,53 +20,61 @@ class ViewJobApplication extends ViewRecord
             Actions\EditAction::make()
                 ->visible(fn () => $this->record->status === 'new'),
 
-            // Shortlist Action
             Actions\Action::make('shortlist')
                 ->icon('heroicon-o-star')
                 ->color('warning')
-                ->action(fn () => $this->record->shortlist())
+                ->action(function () {
+                    $this->record->shortlist();
+                    $this->record->candidate->notify(new RecruitmentNotification('shortlisted', [
+                        'job_title' => $this->record->jobPosting->title,
+                        'application_id' => $this->record->id
+                    ]));
+                })
                 ->requiresConfirmation()
-                ->modalHeading('Shortlist Candidate')
-                ->modalDescription('Are you sure you want to shortlist this candidate?')
                 ->visible(fn () => in_array($this->record->status, ['new', 'reviewed'])),
 
-            // Schedule Interview
             Actions\Action::make('schedule_interview')
                 ->icon('heroicon-o-calendar')
                 ->color('info')
-                ->action(fn () => $this->record->scheduleInterview())
-                ->requiresConfirmation()
+                ->action(function () {
+                    $this->record->scheduleInterview();
+                    $this->record->candidate->notify(new RecruitmentNotification('interview_scheduled', [
+                        'job_title' => $this->record->jobPosting->title,
+                        'interview_id' => $this->record->id,
+                        'interview_date' => now()->addDays(7)->toDateString(),
+                        'interview_time' => '10:00',
+                        'interview_mode' => 'video'
+                    ]));
+                })
                 ->visible(fn () => $this->record->status === 'shortlisted'),
 
-            // Complete Interview
-            Actions\Action::make('complete_interview')
-                ->icon('heroicon-o-check-circle')
-                ->color('success')
-                ->action(fn () => $this->record->completeInterview())
-                ->requiresConfirmation()
-                ->visible(fn () => $this->record->status === 'interview_scheduled'),
-
-            // Hire
             Actions\Action::make('hire')
                 ->icon('heroicon-o-user-plus')
                 ->color('success')
-                ->action(fn () => $this->record->hire())
+                ->action(function () {
+                    $this->record->hire();
+                    $this->record->candidate->notify(new RecruitmentNotification('offer_letter', [
+                        'job_title' => $this->record->jobPosting->title,
+                        'department' => $this->record->jobPosting->department->name,
+                        'start_date' => now()->addDays(30)->format('Y-m-d'),
+                        'valid_until' => now()->addDays(7)->format('Y-m-d')
+                    ]));
+                })
                 ->requiresConfirmation()
-                ->modalHeading('Hire Candidate')
-                ->modalDescription('This will mark the candidate as hired. Continue?')
                 ->visible(fn () => $this->record->status === 'interview_completed'),
 
-            // Reject
             Actions\Action::make('reject')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
+                ->action(function () {
+                    $this->record->reject();
+                    $this->record->candidate->notify(new RecruitmentNotification('rejected', [
+                        'job_title' => $this->record->jobPosting->title
+                    ]));
+                })
                 ->requiresConfirmation()
-                ->modalHeading('Reject Application')
-                ->modalDescription('Are you sure you want to reject this application?')
-                ->action(fn () => $this->record->reject())
                 ->visible(fn () => !in_array($this->record->status, ['rejected', 'hired'])),
 
-            // Download Resume
             Actions\Action::make('download_resume')
                 ->icon('heroicon-o-document-arrow-down')
                 ->url(fn () => storage_path('app/public/' . $this->record->resume_path))
@@ -174,14 +183,14 @@ class ViewJobApplication extends ViewRecord
 
                         Infolists\Components\TextEntry::make('portfolio_url')
                             ->label('Portfolio')
-                            ->url()
+                            ->url(fn ($record) => $record->portfolio_url)
                             ->openUrlInNewTab()
                             ->visible(fn ($record) => $record->portfolio_url)
                             ->icon('heroicon-m-globe-alt'),
 
                         Infolists\Components\TextEntry::make('linkedin_url')
                             ->label('LinkedIn')
-                            ->url()
+                            ->url(fn ($record) => $record->linkedin_url)
                             ->openUrlInNewTab()
                             ->visible(fn ($record) => $record->linkedin_url)
                             ->icon('heroicon-s-square-3-stack-3d'),

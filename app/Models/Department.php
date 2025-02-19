@@ -243,4 +243,11 @@ class Department extends Model
     {
         return $this->belongsTo(OrganizationUnit::class);
     }
+
+    public function departmentHead()
+    {
+        return $this->hasOne(Employee::class, 'id', 'department_head_id');
+    }
+
+
 }

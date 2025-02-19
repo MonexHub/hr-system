@@ -43,7 +43,7 @@ class ViewEmployee extends ViewRecord
                                         ->label('Name')
                                         ->weight(FontWeight::Bold),
 
-                                    TextEntry::make('job_title')
+                                    TextEntry::make('jobTitle.name')
                                         ->label('Position'),
 
                                     TextEntry::make('department.name')

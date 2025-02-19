@@ -6,10 +6,12 @@ use App\Filament\Admin\Resources\InterviewScheduleResource\Pages;
 use App\Models\InterviewSchedule;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 class InterviewScheduleResource extends Resource
 {
@@ -55,6 +57,7 @@ class InterviewScheduleResource extends Resource
                         ->required()
                         ->timezone(config('app.timezone'))
                         ->minutesStep(15),
+
 
                     Forms\Components\TextInput::make('duration_minutes')
                         ->required()
@@ -258,16 +261,42 @@ class InterviewScheduleResource extends Resource
                         Forms\Components\Textarea::make('recommendations'),
                     ])
                     ->action(function (InterviewSchedule $record, array $data): void {
-                        $record->update([
-                            'status' => 'completed',
-                            'feedback' => $data['feedback'],
-                            'rating' => $data['rating'],
-                            'recommendations' => $data['recommendations'],
-                        ]);
+                        DB::transaction(function () use ($record, $data) {
+                            // Update interview schedule
+                            $record->update([
+                                'status' => 'completed',
+                                'feedback' => $data['feedback'],
+                                'rating' => $data['rating'],
+                                'recommendations' => $data['recommendations'],
+                            ]);
+
+                            // Update job application status
+                            if ($record->jobApplication) {
+                                $record->jobApplication->update([
+                                    'status' => 'interview_completed'
+                                ]);
+
+                                // Update candidate status if exists
+                                if ($record->jobApplication->candidate) {
+                                    $record->jobApplication->candidate->update([
+                                        'status' => 'interview_completed'
+                                    ]);
+                                }
+                            }
+                        });
+
+                        Notification::make()
+                            ->title('Interview feedback recorded successfully')
+                            ->success()
+                            ->send();
                     })
+                    ->requiresConfirmation()
+                    ->modalHeading('Record Interview Feedback')
+                    ->modalDescription('Please provide detailed feedback for this interview.')
                     ->visible(fn (InterviewSchedule $record): bool =>
                     in_array($record->status, ['confirmed', 'scheduled'])
                     ),
+
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
