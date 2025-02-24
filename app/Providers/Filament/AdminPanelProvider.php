@@ -2,6 +2,12 @@
 
 
 namespace App\Providers\Filament;
+use App\Filament\Admin\Widgets\HolidayCalendarWidget;
+use App\Filament\Widgets\DepartmentHeadcount;
+use App\Filament\Widgets\EmployeeDistributionWidget;
+use App\Filament\Widgets\EmployeeGenderDistribution;
+use App\Filament\Widgets\EmployeeOverviewWidget;
+use App\Filament\Widgets\RecentNotificationsWidget;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use DiogoGPinto\AuthUIEnhancer\AuthUIEnhancerPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -22,6 +28,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Joaopaulolndev\FilamentEditProfile\FilamentEditProfilePlugin;
 use Joaopaulolndev\FilamentEditProfile\Pages\EditProfilePage;
+use Leandrocfe\FilamentApexCharts\FilamentApexChartsPlugin;
 use Nuxtifyts\DashStackTheme\DashStackThemePlugin;
 use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
 use Swis\Filament\Backgrounds\ImageProviders\MyImages;
@@ -62,12 +69,15 @@ class AdminPanelProvider extends PanelProvider
             ])
 
             // Widget Discovery
-            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
+//            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
             ->widgets([
-                Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                EmployeeOverviewWidget::class,
+                HolidayCalendarWidget::class,
+//                EmployeeGenderDistribution::class,
+                RecentNotificationsWidget::class,
             ])
             ->plugins([
+                FilamentApexChartsPlugin::make(),
                 FilamentShieldPlugin::make()
                     ->gridColumns([
                         'default' => 1,
@@ -103,7 +113,6 @@ class AdminPanelProvider extends PanelProvider
                     ->shouldShowBrowserSessionsForm()
                     ->shouldShowAvatarForm()
                     ->customProfileComponents([
-                        \App\Livewire\CustomProfileComponent::class,
                     ]),
                 DashStackThemePlugin::make()
            ])

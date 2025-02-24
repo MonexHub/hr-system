@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use Exception;
@@ -16,7 +19,14 @@ use Carbon\CarbonImmutable;
 
 class Employee extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes,Notifiable;
+    public const PROBATION_DURATION = 3;
+    public const CONTRACT_STATUSES = [
+        'permanent' => 'Permanent',
+        'contract' => 'Contract',
+        'probation' => 'Probation',
+    ];
+
 
     protected $fillable = [
         'user_id',
@@ -593,6 +603,148 @@ class Employee extends Model
         $this->attributes['gender'] = strtolower(trim($value));
     }
 
+
+    /**
+     * Get the employee's notification preferences.
+     */
+    public function notificationPreferences(): HasOne
+    {
+        return $this->hasOne(NotificationPreference::class);
+    }
+
+    /**
+     * Get the employee's notification logs.
+     */
+    public function notificationLogs(): HasMany
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
+    /**
+     * Check if employee can receive notifications.
+     */
+    public function canReceiveNotifications(): bool
+    {
+        return $this->employment_status === 'active' &&
+            $this->notificationPreferences &&
+            ($this->notificationPreferences->email_notifications ||
+                $this->notificationPreferences->in_app_notifications);
+    }
+
+    /**
+     * Get the employee's preferred notification channels.
+     */
+    public function getPreferredChannels(): array
+    {
+        if (!$this->notificationPreferences) {
+            return ['mail', 'database']; // Default channels
+        }
+
+        return $this->notificationPreferences->getPreferredChannels();
+    }
+
+    /**
+     * Get the employee's preferred language for notifications.
+     */
+    public function getPreferredLanguageAttribute(): string
+    {
+        return $this->notificationPreferences?->preferred_language ?? 'en';
+    }
+
+    /**
+     * Create default notification preferences for employee.
+     */
+    public function createDefaultNotificationPreferences(): void
+    {
+        if (!$this->notificationPreferences) {
+            $this->notificationPreferences()->create([
+                'holiday_notifications' => true,
+                'birthday_notifications' => true,
+                'email_notifications' => true,
+                'in_app_notifications' => true,
+                'preferred_language' => 'en'
+            ]);
+        }
+    }
+
+    /**
+     * Override the route notification for mail to use work email.
+     */
+    public function routeNotificationForMail(): string
+    {
+        return $this->email;
+    }
+
+    public function scopeOnProbation($query)
+    {
+        return $query->where('contract_type', 'probation')
+            ->where(function ($query) {
+                $query->whereNull('contract_end_date')
+                    ->orWhere('contract_end_date', '>', now());
+            })
+            ->whereRaw('DATEDIFF(NOW(), appointment_date) <= ?', [static::PROBATION_DURATION * 30]);
+    }
+
+    public function scopeProbationEnding($query, $days = 7)
+    {
+        $probationEndDate = DB::raw('DATE_ADD(appointment_date, INTERVAL ' . static::PROBATION_DURATION . ' MONTH)');
+
+        return $query->where('contract_type', 'probation')
+            ->whereRaw("DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)",
+                [static::PROBATION_DURATION, $days]);
+    }
+
+    public function scopeContractExpiringSoon($query, $days = 30)
+    {
+        return $query->where(function ($query) use ($days) {
+            // For fixed-term contracts
+            $query->where('contract_type', 'contract')
+                ->whereNotNull('contract_end_date')
+                ->whereRaw('contract_end_date BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)', [$days]);
+        })->orWhere(function ($query) use ($days) {
+            // For probation periods
+            $query->where('contract_type', 'probation')
+                ->whereRaw('DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)',
+                    [static::PROBATION_DURATION, $days]);
+        });
+    }
+
+    public function isProbationEnding($days = 7): bool
+    {
+        if ($this->contract_type !== 'probation') {
+            return false;
+        }
+
+        $probationEndDate = $this->appointment_date->addMonths(static::PROBATION_DURATION);
+        $warningDate = now()->addDays($days);
+
+        return $probationEndDate->isFuture() &&
+            $probationEndDate->lte($warningDate);
+    }
+
+    public function getProbationEndDate(): ?Carbon
+    {
+        if ($this->contract_type !== 'probation') {
+            return null;
+        }
+
+        return $this->appointment_date->addMonths(static::PROBATION_DURATION);
+    }
+
+    public function daysUntilProbationEnds(): ?int
+    {
+        if ($this->contract_type !== 'probation') {
+            return null;
+        }
+
+        $probationEndDate = $this->getProbationEndDate();
+
+        if ($probationEndDate->isPast()) {
+            return -1 * now()->diffInDays($probationEndDate);
+        }
+
+        return now()->diffInDays($probationEndDate);
+    }
 
 
 

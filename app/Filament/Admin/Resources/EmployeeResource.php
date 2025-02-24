@@ -153,7 +153,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                             $departmentId = $get('department_id');
                                             if ($departmentId) {
                                                 return \App\Models\JobTitle::where('department_id', $departmentId)
-                                                    ->pluck('name', 'id');
+                                                    ->pluck('name', 'id')
+                                                    ->toArray(); // Convert to array explicitly
                                             }
                                             return [];
                                         })
@@ -161,9 +162,9 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ->searchable()
                                         ->preload(true)
                                         ->live()
-                                        ->visible(fn(callable $get) => !empty($get('department_id')))
+                                        ->visible(fn(callable $get) => filled($get('department_id')))
                                         ->afterStateUpdated(function ($state, callable $set) {
-                                            if ($state) {
+                                            if (filled($state)) { // Using filled() instead of direct check
                                                 $jobTitle = \App\Models\JobTitle::find($state);
                                                 if ($jobTitle) {
                                                     $set('net_salary', $jobTitle->net_salary_min);
@@ -295,6 +296,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                     return Role::whereNotIn('name', ['super_admin'])->pluck('name', 'name');
                                                 })
                                                 ->required()
+                                                ->dehydrated(fn ($operation) => $operation === 'edit')
                                                 ->preload(true)
                                                 ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager']))
                                         ])
@@ -371,6 +373,51 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->falseColor('warning')
                     ->alignCenter()
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                Tables\Columns\TextColumn::make('contract_status')
+                    ->label('Contract Status')
+                    ->badge()
+                    ->formatStateUsing(function (Employee $record): string {
+                        if ($record->contract_type === 'permanent') {
+                            return 'Permanent';
+                        }
+
+                        if ($record->contract_type === 'probation') {
+                            $daysLeft = $record->daysUntilProbationEnds();
+                            if ($daysLeft < 0) {
+                                return 'Probation Ended';
+                            }
+                            return "Probation ({$daysLeft} days left)";
+                        }
+
+                        if ($record->contract_type === 'contract') {
+                            $daysLeft = $record->daysUntilContractExpires();
+                            return "Contract ({$daysLeft} days left)";
+                        }
+
+                        return $record->contract_type;
+                    })
+                    ->color(function (Employee $record): string {
+                        if ($record->contract_type === 'permanent') {
+                            return 'success';
+                        }
+
+                        if ($record->contract_type === 'probation') {
+                            $daysLeft = $record->daysUntilProbationEnds();
+                            if ($daysLeft < 0) return 'danger';
+                            if ($daysLeft <= 7) return 'warning';
+                            return 'info';
+                        }
+
+                        if ($record->contract_type === 'contract') {
+                            $daysLeft = $record->daysUntilContractExpires();
+                            if ($daysLeft < 0) return 'danger';
+                            if ($daysLeft <= 30) return 'warning';
+                            return 'success';
+                        }
+
+                        return 'gray';
+                    })
+
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('department')
@@ -384,6 +431,31 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                         'terminated' => 'Terminated',
                         'resigned' => 'Resigned',
                     ])
+                    ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                Tables\Filters\SelectFilter::make('contract_status')
+                    ->options([
+                        'probation_ending' => 'Probation Ending Soon',
+                        'probation_ended' => 'Probation Ended',
+                        'contract_expiring' => 'Contract Expiring Soon',
+                        'contract_expired' => 'Contract Expired',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+
+                        return match ($data['value']) {
+                            'probation_ending' => $query->probationEnding(7),
+                            'probation_ended' => $query->where('contract_type', 'probation')
+                                ->whereRaw('DATEDIFF(NOW(), appointment_date) > ?', [Employee::PROBATION_DURATION * 30]),
+                            'contract_expiring' => $query->where('contract_type', 'contract')
+                                ->contractExpiringSoon(30),
+                            'contract_expired' => $query->where('contract_type', 'contract')
+                                ->whereNotNull('contract_end_date')
+                                ->whereDate('contract_end_date', '<', now()),
+                            default => $query
+                        };
+                    })
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
 
                 Tables\Filters\SelectFilter::make('contract_type')

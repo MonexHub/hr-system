@@ -32,6 +32,7 @@ class UserEmployeeSeeder extends Seeder
         $ctoTitle = JobTitle::where('name', 'CTO')->first();
         $itOfficerTitle = JobTitle::where('name', 'IT Officer')->first();
 
+
         // Create Super Admin
         $admin = $this->createUserAndEmployee(
             'Thecla Denis Ntyangiri',
