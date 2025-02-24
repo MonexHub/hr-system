@@ -77,7 +77,7 @@ class AdminPanelProvider extends PanelProvider
                 RecentNotificationsWidget::class,
             ])
             ->plugins([
-                FilamentApexChartsPlugin::make(),
+//                FilamentApexChartsPlugin::make(),
                 FilamentShieldPlugin::make()
                     ->gridColumns([
                         'default' => 1,
