@@ -560,30 +560,101 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->label('Resend Setup Link')
                     ->icon('heroicon-o-envelope')
                     ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Resend Account Setup Link')
+                    ->modalDescription('This will generate a new setup link and send it to the employee via email and SMS if available.')
+                    ->modalSubmitActionLabel('Resend Link')
                     ->visible(function (Employee $record) {
-                        // Add debugging
-                        $hasPermission = auth()->user()->hasRole(['super_admin', 'hr_manager']);
-                        $userExists = $record->user !== null;
-                        $needsSetup = false;
+                        return auth()->user()->hasRole(['super_admin', 'hr_manager']) && $record->user !== null;
+                    })
+                    ->action(function (Employee $record) {
+                        // Generate new token
+                        $token = Str::random(64);
 
-                        if ($userExists) {
-                            $needsSetup = !$record->user->password ||
-                                !$record->user->email_verified_at;
-                        }
+                        // Store token in cache
+                        Cache::put(
+                            'account_setup_' . $record->id,
+                            $token,
+                            now()->addHours(48)
+                        );
 
-                        // Log all conditions
-                        \Log::info('Resend Setup Link Visibility Check', [
-                            'employee_id' => $record->id,
-                            'has_permission' => $hasPermission,
-                            'user_exists' => $userExists,
-                            'needs_setup' => $needsSetup,
-                            'user_has_password' => $record->user?->password !== null,
-                            'email_verified' => $record->user?->email_verified_at !== null,
-                            'current_user_roles' => auth()->user()->roles->pluck('name')
+                        $setupUrl = route('employee.setup-account', [
+                            'token' => $token,
+                            'email' => $record->email,
                         ]);
 
-                        // Simplified condition for testing
-                        return $hasPermission && $userExists;
+                        $emailSent = false;
+                        $smsSent = false;
+                        $errors = [];
+
+                        // Try to send email
+                        try {
+                            Mail::to($record->email)->send(
+                                new NewEmployeeAccountSetupMail($record, $token)
+                            );
+                            $emailSent = true;
+                        } catch (\Exception $e) {
+                            $errors['email'] = $e->getMessage();
+                            Log::error('Failed to send setup email', [
+                                'employee_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+
+                        // Try to send SMS if phone number exists
+                        if ($record->phone_number) {
+                            try {
+                                $beemService = new BeemService();
+                                $smsMessage = "Your " . config('app.name') . " account setup link has been reset. Set up your account at: " . $setupUrl;
+
+                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                                if ($result['success']) {
+                                    $smsSent = true;
+                                } else {
+                                    $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                    Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                        'error' => $result['error'] ?? 'Unknown error'
+                                    ]);
+                                }
+                            } catch (\Exception $e) {
+                                $errors['sms'] = $e->getMessage();
+                                Log::error('Failed to send setup SMS', [
+                                    'employee_id' => $record->id,
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+
+                        // Determine notification type based on results
+                        if ($emailSent || $smsSent) {
+                            $channels = [];
+                            if ($emailSent) $channels[] = 'email';
+                            if ($smsSent) $channels[] = 'SMS';
+
+                            $notification = Notification::make()
+                                ->success()
+                                ->title('Setup Link Sent')
+                                ->body('Setup link sent via ' . implode(' and ', $channels) . '.');
+
+                            if (!empty($errors)) {
+                                $failedChannels = array_keys($errors);
+                                $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                            }
+
+                            $notification->send();
+                        } else {
+                            Notification::make()
+                                ->danger()
+                                ->title('Setup Link Failed')
+                                ->body('Failed to send setup link through any channel. Please try again.')
+                                ->send();
+
+                            Log::error('Failed to send setup link through any channel', [
+                                'employee_id' => $record->id,
+                                'errors' => $errors
+                            ]);
+                        }
                     }),
                 ExportEmployeeProfileAction::make()
                     ->visible(fn() => auth()->user()->can('export_employee')),
