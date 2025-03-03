@@ -475,24 +475,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('Create User Account')
-                    ->modalDescription('Create a new user account for this employee and send setup instructions via email.')
+                    ->modalDescription('Create a new user account for this employee and send setup instructions via email and SMS if available.')
                     ->modalSubmitActionLabel('Create Account')
                     ->visible(function (Employee $record) {
-                        // Only show if user has permission and employee has no user account
                         return auth()->user()->hasRole(['super_admin', 'hr_manager']) && !$record->user;
                     })
-                    ->successNotification(
-                        Notification::make()
-                            ->success()
-                            ->title('Account Created')
-                            ->body('User account has been created and setup instructions sent.')
-                    )
-                    ->failureNotification(
-                        Notification::make()
-                            ->danger()
-                            ->title('Error')
-                            ->body('Failed to create user account. Please try again.')
-                    )
                     ->action(function (Employee $record) {
                         try {
                             // Create new user account
@@ -516,37 +503,98 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                 now()->addHours(48)
                             );
 
-                            // Send setup instructions via email
-                            Mail::to($record->email)->send(
-                                new NewEmployeeAccountSetupMail($record, $token)
-                            );
+                            $setupUrl = route('employee.setup-account', [
+                                'token' => $token,
+                                'email' => $record->email,
+                            ]);
 
-                            // Send SMS if phone number exists
-                            if ($record->phone_number) {
-                                $beemService = new BeemService();
+                            $emailSent = false;
+                            $smsSent = false;
+                            $errors = [];
 
-                                $setupUrl = route('employee.setup-account', [
-                                    'token' => $token,
-                                    'email' => $record->email,
+                            // Try to send email
+                            try {
+                                Mail::to($record->email)->send(
+                                    new NewEmployeeAccountSetupMail($record, $token)
+                                );
+                                $emailSent = true;
+                            } catch (\Exception $e) {
+                                $errors['email'] = $e->getMessage();
+                                Log::error('Failed to send setup email', [
+                                    'employee_id' => $record->id,
+                                    'error' => $e->getMessage()
                                 ]);
+                            }
 
-                                $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
+                            // Try to send SMS if phone number exists
+                            if ($record->phone_number) {
+                                try {
+                                    $beemService = new BeemService();
+                                    $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
 
-                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+                                    $result = $beemService->sendSMS($record->phone_number, $smsMessage);
 
-                                if (!$result['success']) {
-                                    \Log::warning('SMS sending failed for employee: ' . $record->id, [
-                                        'error' => $result['error'] ?? 'Unknown error'
+                                    if ($result['success']) {
+                                        $smsSent = true;
+                                    } else {
+                                        $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                        Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                            'error' => $result['error'] ?? 'Unknown error'
+                                        ]);
+                                    }
+                                } catch (\Exception $e) {
+                                    $errors['sms'] = $e->getMessage();
+                                    Log::error('Failed to send setup SMS', [
+                                        'employee_id' => $record->id,
+                                        'error' => $e->getMessage()
                                     ]);
                                 }
                             }
 
-                            return true;
+                            // Determine notification type based on results
+                            if ($emailSent || $smsSent) {
+                                $channels = [];
+                                if ($emailSent) $channels[] = 'email';
+                                if ($smsSent) $channels[] = 'SMS';
+
+                                $notification = Notification::make()
+                                    ->success()
+                                    ->title('Account Created')
+                                    ->body('User account created and setup instructions sent via ' . implode(' and ', $channels) . '.');
+
+                                if (!empty($errors)) {
+                                    $failedChannels = array_keys($errors);
+                                    $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                                }
+
+                                $notification->send();
+                                return true;
+                            } else {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Account Created With Warning')
+                                    ->body('User account was created but failed to send setup instructions through any channel. Please try resending the setup link.')
+                                    ->send();
+
+                                Log::error('Account created but failed to send setup instructions through any channel', [
+                                    'employee_id' => $record->id,
+                                    'errors' => $errors
+                                ]);
+                                return true;
+                            }
+
                         } catch (\Exception $e) {
                             Log::error('Failed to create user account', [
                                 'employee_id' => $record->id,
                                 'error' => $e->getMessage()
                             ]);
+
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('Failed to create user account: ' . $e->getMessage())
+                                ->send();
+
                             throw $e;
                         }
                     }),
