@@ -4,10 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class AppSettings extends Model
 {
     use HasFactory;
+
     protected $table = 'settings';
 
     protected $fillable = [
@@ -18,25 +20,30 @@ class AppSettings extends Model
     ];
 
     /**
-     * Get a setting value by key
+     * Get a setting value by key.
      */
     public static function get(string $key, $default = null)
     {
-        $setting = self::where('key', $key)->first();
-
-        if (!$setting) {
+        // Prevent querying a non-existent table
+        if (!Schema::hasTable('settings')) {
             return $default;
         }
 
-        return $setting->value;
+        $setting = self::where('key', $key)->first();
+
+        return $setting ? $setting->value : $default;
     }
 
     /**
-     * Set a setting value
+     * Set a setting value.
      */
     public static function set(string $key, $value, string $group = 'general', bool $isPublic = false)
     {
-        $setting = self::updateOrCreate(
+        if (!Schema::hasTable('settings')) {
+            return false; // Avoid errors if table doesn't exist
+        }
+
+        return self::updateOrCreate(
             ['key' => $key],
             [
                 'value' => $value,
@@ -44,7 +51,29 @@ class AppSettings extends Model
                 'is_public' => $isPublic,
             ]
         );
+    }
 
-        return $setting;
+    /**
+     * Get all settings.
+     */
+    public static function allSettings()
+    {
+        if (!Schema::hasTable('settings')) {
+            return collect(); // Return an empty collection if table doesn't exist
+        }
+
+        return self::all();
+    }
+
+    /**
+     * Delete a setting by key.
+     */
+    public static function remove(string $key)
+    {
+        if (!Schema::hasTable('settings')) {
+            return false;
+        }
+
+        return self::where('key', $key)->delete();
     }
 }
