@@ -489,6 +489,9 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                 'password' => Hash::make(Str::random(16)) // temporary password
                             ]);
 
+                            // Assign 'employee' role to the user
+                            $user->assignRole('employee');
+
                             // Associate user with employee
                             $record->user_id = $user->id;
                             $record->save();
@@ -560,7 +563,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                 $notification = Notification::make()
                                     ->success()
                                     ->title('Account Created')
-                                    ->body('User account created and setup instructions sent via ' . implode(' and ', $channels) . '.');
+                                    ->body('User account created with "employee" role and setup instructions sent via ' . implode(' and ', $channels) . '.');
 
                                 if (!empty($errors)) {
                                     $failedChannels = array_keys($errors);
@@ -573,7 +576,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                 Notification::make()
                                     ->warning()
                                     ->title('Account Created With Warning')
-                                    ->body('User account was created but failed to send setup instructions through any channel. Please try resending the setup link.')
+                                    ->body('User account was created with "employee" role but failed to send setup instructions through any channel. Please try resending the setup link.')
                                     ->send();
 
                                 Log::error('Account created but failed to send setup instructions through any channel', [
