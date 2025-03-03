@@ -469,50 +469,54 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 ,
             ])
             ->actions([
-
-                Tables\Actions\ViewAction::make()
-                    ->visible(fn(Employee $record) => auth()->user()->can('view', $record)),
-
-                Tables\Actions\EditAction::make()
-                    ->visible(fn(Employee $record) => auth()->user()->can('update', $record)),
-                Tables\Actions\Action::make('resend_setup')
-                    ->label('Resend Setup Link')
-                    ->icon('heroicon-o-envelope')
-                    ->color('warning')
+                Tables\Actions\Action::make('create_user_account')
+                    ->label('Create User Account')
+                    ->icon('heroicon-o-user-plus')
+                    ->color('success')
                     ->requiresConfirmation()
-                    ->modalHeading('Resend Account Setup Link')
-                    ->modalDescription('Are you sure you want to resend the account setup link? This will invalidate any previous setup links.')
-                    ->modalSubmitActionLabel('Yes, resend link')
+                    ->modalHeading('Create User Account')
+                    ->modalDescription('Create a new user account for this employee and send setup instructions via email.')
+                    ->modalSubmitActionLabel('Create Account')
+                    ->visible(function (Employee $record) {
+                        // Only show if user has permission and employee has no user account
+                        return auth()->user()->hasRole(['super_admin', 'hr_manager']) && !$record->user;
+                    })
                     ->successNotification(
                         Notification::make()
                             ->success()
-                            ->title('Setup Instructions Sent')
-                            ->body('Account setup instructions have been sent via email and SMS.')
+                            ->title('Account Created')
+                            ->body('User account has been created and setup instructions sent.')
                     )
                     ->failureNotification(
                         Notification::make()
                             ->danger()
                             ->title('Error')
-                            ->body('Failed to send setup instructions. Please try again.')
+                            ->body('Failed to create user account. Please try again.')
                     )
-                    ->action(function ($record) {
+                    ->action(function (Employee $record) {
                         try {
-                            // Generate new token
+                            // Create new user account
+                            $user = \App\Models\User::create([
+                                'name' => $record->full_name,
+                                'email' => $record->email,
+                                'password' => Hash::make(Str::random(16)) // temporary password
+                            ]);
+
+                            // Associate user with employee
+                            $record->user_id = $user->id;
+                            $record->save();
+
+                            // Generate token for account setup
                             $token = Str::random(64);
 
-                            // Store new token in cache
+                            // Store token in cache
                             Cache::put(
                                 'account_setup_' . $record->id,
                                 $token,
                                 now()->addHours(48)
                             );
 
-                            $setupUrl = route('employee.setup-account', [
-                                'token' => $token,
-                                'email' => $record->email,
-                            ]);
-
-                            // Send email
+                            // Send setup instructions via email
                             Mail::to($record->email)->send(
                                 new NewEmployeeAccountSetupMail($record, $token)
                             );
@@ -520,6 +524,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                             // Send SMS if phone number exists
                             if ($record->phone_number) {
                                 $beemService = new BeemService();
+
+                                $setupUrl = route('employee.setup-account', [
+                                    'token' => $token,
+                                    'email' => $record->email,
+                                ]);
 
                                 $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
 
@@ -534,27 +543,47 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
                             return true;
                         } catch (\Exception $e) {
-                            Log::error('Failed to send setup instructions', [
+                            Log::error('Failed to create user account', [
                                 'employee_id' => $record->id,
                                 'error' => $e->getMessage()
                             ]);
                             throw $e;
                         }
-                    })
-                    // Updated visibility condition
+                    }),
+
+                Tables\Actions\ViewAction::make()
+                    ->visible(fn(Employee $record) => auth()->user()->can('view', $record)),
+
+                Tables\Actions\EditAction::make()
+                    ->visible(fn(Employee $record) => auth()->user()->can('update', $record)),
+                Tables\Actions\Action::make('resend_setup')
+                    ->label('Resend Setup Link')
+                    ->icon('heroicon-o-envelope')
+                    ->color('warning')
                     ->visible(function (Employee $record) {
-                        // Check if user has admin/HR role
+                        // Add debugging
                         $hasPermission = auth()->user()->hasRole(['super_admin', 'hr_manager']);
+                        $userExists = $record->user !== null;
+                        $needsSetup = false;
 
-                        // Check if user exists but hasn't set up their account
-                        $needsSetup = $record->user &&
-                            (
-                                !$record->user->password ||
-                                $record->user->password === Hash::make(Str::random(16)) ||
-                                !$record->user->email_verified_at
-                            );
+                        if ($userExists) {
+                            $needsSetup = !$record->user->password ||
+                                !$record->user->email_verified_at;
+                        }
 
-                        return $hasPermission && $needsSetup;
+                        // Log all conditions
+                        \Log::info('Resend Setup Link Visibility Check', [
+                            'employee_id' => $record->id,
+                            'has_permission' => $hasPermission,
+                            'user_exists' => $userExists,
+                            'needs_setup' => $needsSetup,
+                            'user_has_password' => $record->user?->password !== null,
+                            'email_verified' => $record->user?->email_verified_at !== null,
+                            'current_user_roles' => auth()->user()->roles->pluck('name')
+                        ]);
+
+                        // Simplified condition for testing
+                        return $hasPermission && $userExists;
                     }),
                 ExportEmployeeProfileAction::make()
                     ->visible(fn() => auth()->user()->can('export_employee')),
@@ -568,8 +597,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
                         ->visible(fn() => auth()->user()->can('delete_any_employee')),
-                    ExportEmployeeProfileAction::make()
-                        ->visible(fn() => auth()->user()->can('export_employee')),
+//                    ExportEmployeeProfileAction::make()
+//                        ->visible(fn() => auth()->user()->can('export_employee')),
                 ]),
             ]);
     }

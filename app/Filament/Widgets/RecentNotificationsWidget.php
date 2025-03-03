@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\NotificationLog;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 
 class RecentNotificationsWidget extends Widget
 {
@@ -16,13 +17,27 @@ class RecentNotificationsWidget extends Widget
     // Add polling for real-time updates
     protected static ?string $pollingInterval = '15s';
 
+    // Helper method to check if user has access to all employees' notifications
+    protected function canViewAllNotifications(): bool
+    {
+        return auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('hr-manager');
+    }
+
     public function getNotifications()
     {
-        return NotificationLog::query()
+        $query = NotificationLog::query()
             ->with('employee')
             ->latest('sent_at')
-            ->limit(5)
-            ->get()
+            ->limit(5);
+
+        // Filter notifications for regular employees
+        if (!$this->canViewAllNotifications()) {
+            $query->whereHas('employee', function (Builder $query) {
+                $query->where('id', auth()->user()->employee->id);
+            });
+        }
+
+        return $query->get()
             ->map(function ($log) {
                 return [
                     'id' => $log->id,
@@ -47,6 +62,32 @@ class RecentNotificationsWidget extends Widget
 
     public function getNotificationCountToday(): int
     {
-        return NotificationLog::whereDate('sent_at', today())->count();
+        $query = NotificationLog::whereDate('sent_at', today());
+
+        // Filter counts for regular employees
+        if (!$this->canViewAllNotifications()) {
+            $query->whereHas('employee', function (Builder $query) {
+                $query->where('id', auth()->user()->employee->id);
+            });
+        }
+
+        return $query->count();
+    }
+
+    // Get widget title based on user role
+    public function getWidgetTitle(): string
+    {
+        if ($this->canViewAllNotifications()) {
+            return 'Recent Notifications';
+        }
+
+        return 'Your Recent Notifications';
+    }
+
+    // New method to check if should render widget
+    public static function canView(): bool
+    {
+        // Always show to all users - everyone should see their notifications
+        return true;
     }
 }

@@ -16,7 +16,7 @@ class ProfileResource extends Resource
     protected static ?string $model = Employee::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'My Profile';
-    protected static ?string $navigationGroup = 'Account Settings';
+    protected static ?string $navigationGroup = 'Account AppSettings';
     protected static ?int $navigationSort = 1;
     protected static bool $shouldRegisterNavigation = true;
 

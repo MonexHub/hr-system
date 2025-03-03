@@ -1,13 +1,11 @@
 <?php
 
-
 namespace App\Providers\Filament;
 use App\Filament\Admin\Widgets\HolidayCalendarWidget;
-use App\Filament\Widgets\DepartmentHeadcount;
-use App\Filament\Widgets\EmployeeDistributionWidget;
 use App\Filament\Widgets\EmployeeGenderDistribution;
 use App\Filament\Widgets\EmployeeOverviewWidget;
 use App\Filament\Widgets\RecentNotificationsWidget;
+use App\Helpers\SettingsHelper;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use DiogoGPinto\AuthUIEnhancer\AuthUIEnhancerPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -37,6 +35,12 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        // Get settings from database
+        $appName = SettingsHelper::getAppName();
+        $primaryColor = SettingsHelper::getPrimaryColor();
+        $logoLight = SettingsHelper::getLogo('light');
+        $logoDark = SettingsHelper::getLogo('dark');
+
         return $panel
             ->default()
             ->id('admin')
@@ -51,8 +55,9 @@ class AdminPanelProvider extends PanelProvider
                 'warning' => Color::Amber,
                 'danger' => Color::Red,
             ])
-            ->brandName('HR Management System')
-            ->brandLogo(asset('images/monexLogo.png'))
+            ->brandName($appName ?? 'HR Management System')
+            ->brandLogo(fn () => $logoLight ?? asset('images/monexLogo.png'))
+            ->darkModeBrandLogo(fn () => $logoDark ?? asset('images/monexLogo.png'))
             ->favicon(asset('images/favicon.ico'))
             ->font('Inter')
             ->darkMode(true)
@@ -115,7 +120,7 @@ class AdminPanelProvider extends PanelProvider
                     ->customProfileComponents([
                     ]),
                 DashStackThemePlugin::make()
-           ])
+            ])
             // Middleware
             ->middleware([
                 EncryptCookies::class,

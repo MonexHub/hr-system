@@ -23,8 +23,16 @@ class NotificationPreferenceResource extends Resource
     protected static ?string $navigationGroup = 'Settings';
     protected static ?int $navigationSort = 2;
 
+    // Helper method to check if user has access to all employees
+    protected static function canViewAllEmployees(): bool
+    {
+        return auth()->user()->hasRole('super_admin') || auth()->user()->hasRole('hr-manager');
+    }
+
     public static function form(Form $form): Form
     {
+        $isAdmin = static::canViewAllEmployees();
+
         return $form
             ->schema([
                 Forms\Components\Section::make()
@@ -57,15 +65,27 @@ class NotificationPreferenceResource extends Resource
                             ->searchable()
                             ->preload()
                             ->required()
-                            ->visible(fn (string $context): bool => $context === 'create'),
+                            ->visible(fn (string $context): bool => $context === 'create' && $isAdmin),
 
+                        // For regular employees creating their own preference
+                        Forms\Components\Hidden::make('employee_id')
+                            ->default(fn () => auth()->user()->employee->id)
+                            ->visible(fn (string $context): bool => $context === 'create' && !$isAdmin),
+
+                        // Show current employee info for non-admins creating their own preference
+                        Forms\Components\Placeholder::make('employee_info')
+                            ->content(fn () => 'Creating notification preferences for: ' . auth()->user()->employee->full_name)
+                            ->visible(fn (string $context): bool => $context === 'create' && !$isAdmin),
+
+                        // For editing
                         Select::make('employee_id')
                             ->relationship('employee', 'first_name')
                             ->getOptionLabelFromRecordUsing(fn ($record) => $record->full_name)
                             ->searchable()
                             ->preload()
                             ->required()
-                            ->visible(fn (string $context): bool => $context === 'edit'),
+                            ->visible(fn (string $context): bool => $context === 'edit')
+                            ->disabled(!$isAdmin),
 
                         Select::make('preferred_language')
                             ->options([
@@ -101,7 +121,7 @@ class NotificationPreferenceResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table
+        $table = $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.full_name')
                     ->searchable()
@@ -144,14 +164,26 @@ class NotificationPreferenceResource extends Resource
                 Tables\Filters\TernaryFilter::make('in_app_notifications'),
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn ($record) => static::canViewAllEmployees() || $record->employee_id === auth()->user()->employee->id),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => static::canViewAllEmployees()),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => static::canViewAllEmployees()),
                 ]),
             ]);
+
+        // Filter records for non-admin users
+        if (!static::canViewAllEmployees()) {
+            $table->modifyQueryUsing(function (Builder $query) {
+                $query->where('employee_id', auth()->user()->employee->id);
+            });
+        }
+
+        return $table;
     }
 
 
@@ -169,5 +201,46 @@ class NotificationPreferenceResource extends Resource
             'create' => Pages\CreateNotificationPreference::route('/create'),
             'edit' => Pages\EditNotificationPreference::route('/{record}/edit'),
         ];
+    }
+
+    // Add policy checks to ensure proper authorization
+    public static function canCreate(): bool
+    {
+        // Anyone can create their own notification preference if they don't have one yet
+        if (!static::canViewAllEmployees()) {
+            return !NotificationPreference::where('employee_id', auth()->user()->employee->id)->exists();
+        }
+
+        return true;
+    }
+
+    // Override the getNavigationBadge to show a notification for employees who don't have preferences yet
+    public static function getNavigationBadge(): ?string
+    {
+        // Only show badge for regular employees who don't have a preference set
+        if (!static::canViewAllEmployees() &&
+            !NotificationPreference::where('employee_id', auth()->user()->employee->id)->exists()) {
+            return 'New';
+        }
+
+        return null;
+    }
+
+    // Set badge color to draw attention
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
+
+    public static function canEdit(NotificationPreference|\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        // Only allow editing if admin or the record belongs to the current user
+        return static::canViewAllEmployees() || $record->employee_id === auth()->user()->employee->id;
+    }
+
+    public static function canDelete(NotificationPreference|\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        // Only admins can delete records
+        return static::canViewAllEmployees();
     }
 }

@@ -98,7 +98,7 @@ class ShieldSeeder extends Seeder
             'delete_leave_request',
             'manage_all_leave_requests',
 
-            // Settings
+            // AppSettings
             'manage_system_settings',
             'manage_roles',
             'manage_permissions'

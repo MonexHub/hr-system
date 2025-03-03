@@ -1,11 +1,12 @@
 <?php
 
+use App\Mail\WeeklyContractStatusReport;
 use App\Models\Employee;
 use App\Models\Holiday;
 use App\Notifications\BirthdayReminderNotification;
 use App\Notifications\EmployeeContractStatusNotification;
 use App\Notifications\HolidayReminderNotification;
-use App\Notifications\WeeklyContractStatusReport;
+
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
