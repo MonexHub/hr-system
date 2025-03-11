@@ -119,7 +119,7 @@ class AdminPanelProvider extends PanelProvider
                     ->shouldShowAvatarForm()
                     ->customProfileComponents([
                     ]),
-                DashStackThemePlugin::make()
+//                DashStackThemePlugin::make()
             ])
             // Middleware
             ->middleware([

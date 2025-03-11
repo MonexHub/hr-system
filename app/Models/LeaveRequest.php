@@ -822,6 +822,20 @@ class LeaveRequest extends Model
         }
     }
 
+    public function isEmployeeHRManager(): bool
+    {
+        if (!$this->relationLoaded('employee')) {
+            $this->load('employee');
+        }
+        if ($this->employee && !$this->employee->relationLoaded('user')) {
+            $this->employee->load('user');
+        }
+
+        return $this->employee &&
+            $this->employee->user &&
+            $this->employee->user->hasRole('hr_manager');
+    }
+
     protected function notifyFinalApproval(): void
     {
         try {
