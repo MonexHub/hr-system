@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'default' => env('MAIL_MAILER', 'log'),
+    'default' => env('MAIL_MAILER', 'smtp'),
 
     /*
     |--------------------------------------------------------------------------
@@ -35,14 +35,16 @@ return [
     |
     */
 
+
     'mailers' => [
 
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),
             'url' => env('MAIL_URL'),
-            'host' => env('MAIL_HOST', '127.0.0.1'),
-            'port' => env('MAIL_PORT', 2525),
+            'host' => env('MAIL_HOST', 'smtp.mailtrap.io'),
+            'port' => env('MAIL_PORT', 587),
+            'encryption' => env('MAIL_ENCRYPTION', 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
@@ -96,7 +98,12 @@ return [
         ],
 
         'mailtrap' => [
-            'transport' => 'mailtrap'
+            'transport' => 'mailtrap',
+            'api_key' => env('MAILTRAP_API_KEY'),
+        ],
+        'mailtrap-api' => [
+            'transport' => 'mailtrap',
+            'api_key' => env('MAILTRAP_API_KEY')
         ],
 
     ],
@@ -113,8 +120,8 @@ return [
     */
 
     'from' => [
-        'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
-        'name' => env('MAIL_FROM_NAME', 'Example'),
+        'address' => env('MAIL_FROM_ADDRESS', 'hello@noreply.monex.co.tz'),
+        'name' => env('MAIL_FROM_NAME', 'MonexHR'),
     ],
 
 ];
