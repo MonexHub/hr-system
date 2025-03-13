@@ -37,46 +37,61 @@ class PerformanceAppraisalResource extends Resource
                                     Forms\Components\Section::make('Employee Details')
                                         ->schema([
                                             Forms\Components\Select::make('employee_id')
-                                                ->relationship(
-                                                    name: 'employee',
-                                                    titleAttribute: 'first_name',
-                                                    modifyQueryUsing: fn (Builder $query) => $query->with('department'),
-                                                )
-                                                ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
+                                            ->relationship(
+                                                name: 'employee',
+                                                titleAttribute: 'first_name',
+                                                modifyQueryUsing: fn (Builder $query) => $query->with('department'),
+                                            )
+                                            ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
                                                 "{$record->first_name} {$record->last_name}"
-                                                )
-                                                ->preload()
-                                                ->searchable(['first_name', 'last_name'])
-                                                ->required()
-                                                ->live()
-                                                ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                                    if ($state) {
-                                                        $employee = Employee::with('department.manager')->find($state);
-                                                        if ($employee) {
-                                                            // Set supervisor from reporting relationship or department manager
-                                                            $supervisor_id = $employee->reporting_to ?? $employee->department?->manager_id;
-                                                            $set('immediate_supervisor_id', $supervisor_id);
+                                            )
+                                            ->preload()
+                                            ->searchable(['first_name', 'last_name'])
+                                            ->required()
+                                            ->live()
+                                            ->disabled(fn() => Auth::user()->hasRole('employee')) // Employees cannot modify
+                                            ->default(fn() => Auth::user()->hasRole('employee') ? Auth::user()->employee->id : null) // Auto-select employee
+                                            ->dehydrated(fn() => true)
+                                            ->afterStateUpdated(function ($state, Forms\Set $set) {
+                                                if ($state) {
+                                                    $employee = Employee::with('department.manager')->find($state);
+                                                    if ($employee) {
+                                                        // Determine supervisor from reporting relationship or department manager
+                                                        $supervisor_id = $employee->reporting_to ?? $employee->department?->manager_id;
 
-                                                            // Set default dates if they're not set
-                                                            $set('evaluation_date', now()->format('Y-m-d'));
-                                                            $set('evaluation_period_start', now()->startOfMonth()->format('Y-m-d'));
-                                                            $set('evaluation_period_end', now()->endOfMonth()->format('Y-m-d'));
-                                                        }
+                                                            // Ensure supervisor ID is set only if found
+                                                            if ($supervisor_id) {
+                                                                $set('immediate_supervisor_id', $supervisor_id);
+                                                            }
+
+                                                        // Set default dates if they're not set
+                                                        $set('evaluation_date', now()->format('Y-m-d'));
+                                                        $set('evaluation_period_start', now()->startOfMonth()->format('Y-m-d'));
+                                                        $set('evaluation_period_end', now()->endOfMonth()->format('Y-m-d'));
                                                     }
-                                                }),
+                                                }
+                                            }),
 
-                                            Forms\Components\Select::make('immediate_supervisor_id')
+                                                Forms\Components\Select::make('immediate_supervisor_id')
                                                 ->relationship(
                                                     name: 'supervisor',
                                                     titleAttribute: 'first_name',
                                                 )
                                                 ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
-                                                "{$record->first_name} {$record->last_name}"
+                                                    "{$record->first_name} {$record->last_name}"
                                                 )
                                                 ->preload()
                                                 ->searchable(['first_name', 'last_name'])
                                                 ->required()
-                                                ->disabled(),
+                                                ->disabled()
+                                                ->default(fn($livewire) =>
+                                                ($record = method_exists($livewire, 'getRecord') ? $livewire->getRecord() : null)
+                                                    ? ($record->immediate_supervisor_id ?? $record->employee?->reporting_to ?? $record->employee?->department?->manager_id)
+                                                    : (Auth::user()->hasRole('employee')
+                                                        ? Auth::user()->employee->reporting_to ?? Auth::user()->employee->department?->manager_id
+                                                        : null)
+                                            )
+                                            ->dehydrated(false),
                                         ]),
 
                                     Forms\Components\Section::make('Evaluation Period')
@@ -99,10 +114,51 @@ class PerformanceAppraisalResource extends Resource
                                         ]),
                                 ]),
                         ]),
+                    // Objectives Tab
+                    Forms\Components\Tabs\Tab::make('Objectives')
+                        ->icon('heroicon-m-list-bullet')
+                        ->schema([
+                            Forms\Components\Repeater::make('objectives')
+                                ->relationship('objectives')
+                                ->schema([
+                                    Forms\Components\TextInput::make('objective')
+                                        ->label('Objective Description')
+                                        ->required(),
+                                    Forms\Components\DatePicker::make('completion_date')
+                                        ->label('Completion Date')
+                                        ->required(),
+                                                                        // Rating Field (Only visible to Supervisor or Super Admin)
+                                Forms\Components\Select::make('rating')
+                                ->options([
+                                    1 => '1 - Needs Improvement',
+                                    2 => '2 - Fair',
+                                    3 => '3 - Good',
+                                    4 => '4 - Very Good',
+                                    5 => '5 - Excellent',
+                                ])
+                                ->label('Assessment Rating')
+                                ->visible(fn() =>
+                                    Auth::user()->hasRole('super_admin') ||
+                                    Auth::user()->id === Auth::user()->employee?->reporting_to
+                                ),
 
+                            // Supervisor Feedback Field (Only visible to Supervisor or Super Admin)
+                            Forms\Components\Textarea::make('supervisor_feedback')
+                                ->label('Supervisor Feedback')
+                                ->visible(fn() =>
+                                    Auth::user()->hasRole('super_admin') ||
+                                    Auth::user()->id === Auth::user()->employee?->reporting_to
+                                ),
+                                ])
+                                ->createItemButtonLabel('Add Objective')
+                                ->collapsible(),
+                        ]),
+
+                    // Performance Ratings Tab (Restricted)
                     // Performance Ratings Tab
                     Forms\Components\Tabs\Tab::make('Performance Ratings')
                         ->icon('heroicon-m-star')
+                        ->visible(fn() => Auth::user()->hasRole('super_admin') || Auth::user()->id === Auth::user()->employee?->reporting_to)
                         ->schema([
                             Forms\Components\Section::make('Rating Guide')
                                 ->description('Each competency is rated on a scale of 1-5')
@@ -203,6 +259,7 @@ class PerformanceAppraisalResource extends Resource
                     // Comments & Feedback Tab
                     Forms\Components\Tabs\Tab::make('Comments & Feedback')
                         ->icon('heroicon-m-chat-bubble-left-right')
+                        ->visible(fn() => Auth::user()->hasRole('super_admin') || Auth::user()->id === Auth::user()->employee?->reporting_to)
                         ->schema([
                             Forms\Components\Section::make('Employee Input')
                                 ->schema([
@@ -261,8 +318,14 @@ class PerformanceAppraisalResource extends Resource
 
                 Tables\Columns\TextColumn::make('immediate_supervisor_id')
                     ->label('Supervisor')
-                    ->formatStateUsing(fn ($record) =>
-                        $record->supervisor?->first_name . ' ' . $record->supervisor?->last_name
+                    ->formatStateUsing(fn (PerformanceAppraisal $record) =>
+                    ($employee = Employee::with('department.manager')->find($record->employee_id))
+                    ? ($employee->reporting_to
+                        ? "{$employee->supervisor?->first_name} {$employee->supervisor?->last_name}"
+                        : ($employee->department?->manager
+                            ? "{$employee->department->manager->first_name} {$employee->department->manager->last_name}"
+                            : 'Not Assigned'))
+                    : 'Not Assigned'
                     )
                     ->searchable(query: function (Builder $query, string $search): Builder {
                         return $query->whereHas('supervisor', function ($query) use ($search) {
@@ -306,6 +369,14 @@ class PerformanceAppraisalResource extends Resource
                         'hr_approved', 'completed' => 'success',
                         default => 'gray',
                     }),
+                    Tables\Columns\TextColumn::make('objectives.objective')
+    ->label('Objectives')
+    ->limit(30),
+
+Tables\Columns\TextColumn::make('objectives.rating')
+    ->label('Average Rating')
+    ->formatStateUsing(fn ($state) => number_format($state, 2))
+    ->sortable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -340,7 +411,12 @@ class PerformanceAppraisalResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()
+                ->visible(fn (PerformanceAppraisal $record) =>
+                    Auth::user()->id === $record->employee->reporting_to ||
+                    Auth::user()->id === $record->employee->department?->manager_id ||
+                    Auth::user()->hasRole('super_admin')
+                ),
 
                 Tables\Actions\Action::make('submit')
                     ->action(fn (PerformanceAppraisal $record) => $record->submit())
@@ -354,7 +430,9 @@ class PerformanceAppraisalResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (PerformanceAppraisal $record): bool =>
                         $record->status === 'submitted' &&
-                        Auth::user()->can('supervisor_approve_performance::appraisal')),
+                        (Auth::user()->id === $record->employee->reporting_to ||
+                        Auth::user()->id === $record->employee->department?->manager_id ||
+                        Auth::user()->hasRole('super_admin'))),
 
                 Tables\Actions\Action::make('hr_approve')
                     ->action(fn (PerformanceAppraisal $record) => $record->hrApprove())
