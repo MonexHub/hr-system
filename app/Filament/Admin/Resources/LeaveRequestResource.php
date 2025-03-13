@@ -239,7 +239,6 @@ class LeaveRequestResource extends Resource
             ])
             ->actions([
                 // Department Head Approval Action
-                // Department Head Approval Action
                 Tables\Actions\Action::make('approve_department')
                     ->label('Approve (HOD)')
                     ->icon('heroicon-o-check-circle')
@@ -264,6 +263,7 @@ class LeaveRequestResource extends Resource
                                 ->send();
                         }
                     }),
+
 
                 // HR Approval Action
                 Tables\Actions\Action::make('approve_hr')
@@ -290,6 +290,60 @@ class LeaveRequestResource extends Resource
                                 ->send();
                         }
                     }),
+
+
+                // In LeaveRequestResource.php
+                Tables\Actions\Action::make('super_admin_approve')
+                    ->label('Super Admin Approval')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('success')
+                    ->form([
+                        Forms\Components\Textarea::make('remarks')
+                            ->label('Approval Comments')
+                            ->required()
+                            ->placeholder('Enter approval rationale')
+                            ->maxLength(500)
+                            ->columnSpanFull()
+                    ])
+                    ->visible(function (LeaveRequest $record): bool {
+                        $user = auth()->user();
+                        return $user->hasRole('super_admin') &&
+                            !$record->isApproved() &&
+                            !$record->isRejected() &&
+                            !$record->isCancelled();
+                    })
+                    ->action(function (LeaveRequest $record, array $data): void {
+                        try {
+                            DB::beginTransaction();
+
+                            // Use model's force approval method
+                            $record->forceApprove(
+                                approver: auth()->user(),
+                                remarks: $data['remarks']
+                            );
+
+                            DB::commit();
+
+                            Notification::make()
+                                ->title('Admin Override Approval')
+                                ->body('Leave request force-approved successfully')
+                                ->success()
+                                ->send();
+
+                        } catch (\Exception $e) {
+                            DB::rollBack();
+                            Notification::make()
+                                ->title('Approval Failed')
+                                ->body('Error: ' . $e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->modalHeading('Force Approve Leave Request')
+                    ->modalDescription('This will immediately approve the request regardless of current status')
+                    ->modalSubmitActionLabel('Confirm Force Approval'),
+
+
 
                 // CEO Approval Action
                 Tables\Actions\Action::make('approve_ceo')

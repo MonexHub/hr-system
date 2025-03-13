@@ -654,6 +654,35 @@ class LeaveRequest extends Model
         }
     }
 
+
+
+    public function forceApprove(User $approver, string $remarks): void
+    {
+        DB::transaction(function () use ($approver, $remarks) {
+            // Handle intermediate approvals if needed
+            if ($this->status === self::STATUS_PENDING) {
+                $this->approveDepartment($approver, 'Auto-approved by admin override');
+            }
+
+            if ($this->status === self::STATUS_DEPARTMENT_APPROVED) {
+                $this->approveHR($approver, 'Auto-approved by admin override');
+            }
+
+            // Final approval steps
+            $this->update([
+                'status' => self::STATUS_APPROVED,
+                'ceo_approved_by' => $approver->id,
+                'ceo_approved_at' => now(),
+                'ceo_remarks' => "Super Admin Override: $remarks",
+            ]);
+
+            // Update balances using existing method
+            $this->updateLeaveBalance();
+
+            // Send notifications
+            $this->notifyFinalApproval();
+        });
+    }
     protected static function notifyHRManagers(LeaveRequest $leaveRequest): void
     {
         try {
@@ -725,6 +754,9 @@ class LeaveRequest extends Model
             ]);
         }
     }
+
+
+
 
     protected function notifyHRApproval(): void
     {
