@@ -249,13 +249,22 @@ class LeaveRequestResource extends Resource
                             ->required(),
                     ])
                     ->visible(fn (LeaveRequest $record): bool =>
-                        auth()->user()->hasRole('department_head') &&
-                        $record->status === LeaveRequest::STATUS_PENDING
+                        $record->status === LeaveRequest::STATUS_PENDING &&
+                        (auth()->user()->hasRole('department_head') || auth()->user()->hasRole('super_admin'))
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
+                            DB::beginTransaction();
                             $record->approveDepartment(auth()->user(), $data['remarks']);
+                            DB::commit();
+
+                            Notification::make()
+                                ->title('Approved')
+                                ->body('Leave request has been approved by Department Head.')
+                                ->success()
+                                ->send();
                         } catch (\Exception $e) {
+                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
                                 ->body('Failed to process approval. ' . $e->getMessage())
@@ -263,7 +272,6 @@ class LeaveRequestResource extends Resource
                                 ->send();
                         }
                     }),
-
 
                 // HR Approval Action
                 Tables\Actions\Action::make('approve_hr')
@@ -276,13 +284,24 @@ class LeaveRequestResource extends Resource
                             ->required(),
                     ])
                     ->visible(fn (LeaveRequest $record): bool =>
-                        auth()->user()->hasRole('hr_manager') &&
-                        $record->status === LeaveRequest::STATUS_DEPARTMENT_APPROVED
+                        $record->status === LeaveRequest::STATUS_DEPARTMENT_APPROVED &&
+                        (auth()->user()->hasRole('hr_manager') || auth()->user()->hasRole('super_admin'))
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
+                            DB::beginTransaction();
                             $record->approveHR(auth()->user(), $data['remarks']);
+                            DB::commit();
+
+                            Notification::make()
+                                ->title('Approved')
+                                ->body($record->isEmployeeDepartmentHead()
+                                    ? 'Leave request approved by HR and forwarded to CEO.'
+                                    : 'Leave request has been fully approved by HR.')
+                                ->success()
+                                ->send();
                         } catch (\Exception $e) {
+                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
                                 ->body('Failed to process approval. ' . $e->getMessage())
@@ -290,60 +309,6 @@ class LeaveRequestResource extends Resource
                                 ->send();
                         }
                     }),
-
-
-                // In LeaveRequestResource.php
-                Tables\Actions\Action::make('super_admin_approve')
-                    ->label('Super Admin Approval')
-                    ->icon('heroicon-o-shield-check')
-                    ->color('success')
-                    ->form([
-                        Forms\Components\Textarea::make('remarks')
-                            ->label('Approval Comments')
-                            ->required()
-                            ->placeholder('Enter approval rationale')
-                            ->maxLength(500)
-                            ->columnSpanFull()
-                    ])
-                    ->visible(function (LeaveRequest $record): bool {
-                        $user = auth()->user();
-                        return $user->hasRole('super_admin') &&
-                            !$record->isApproved() &&
-                            !$record->isRejected() &&
-                            !$record->isCancelled();
-                    })
-                    ->action(function (LeaveRequest $record, array $data): void {
-                        try {
-                            DB::beginTransaction();
-
-                            // Use model's force approval method
-                            $record->forceApprove(
-                                approver: auth()->user(),
-                                remarks: $data['remarks']
-                            );
-
-                            DB::commit();
-
-                            Notification::make()
-                                ->title('Admin Override Approval')
-                                ->body('Leave request force-approved successfully')
-                                ->success()
-                                ->send();
-
-                        } catch (\Exception $e) {
-                            DB::rollBack();
-                            Notification::make()
-                                ->title('Approval Failed')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    })
-                    ->modalHeading('Force Approve Leave Request')
-                    ->modalDescription('This will immediately approve the request regardless of current status')
-                    ->modalSubmitActionLabel('Confirm Force Approval'),
-
-
 
                 // CEO Approval Action
                 Tables\Actions\Action::make('approve_ceo')
@@ -356,14 +321,23 @@ class LeaveRequestResource extends Resource
                             ->required(),
                     ])
                     ->visible(fn (LeaveRequest $record): bool =>
-                        auth()->user()->hasRole('chief_executive_officer') &&
                         $record->status === LeaveRequest::STATUS_HR_APPROVED &&
-                        $record->isEmployeeDepartmentHead()
+                        $record->isEmployeeDepartmentHead() &&
+                        (auth()->user()->hasRole('chief_executive_officer') || auth()->user()->hasRole('super_admin'))
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
+                            DB::beginTransaction();
                             $record->approveCEO(auth()->user(), $data['remarks']);
+                            DB::commit();
+
+                            Notification::make()
+                                ->title('Approved')
+                                ->body('Leave request has been fully approved by CEO.')
+                                ->success()
+                                ->send();
                         } catch (\Exception $e) {
+                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
                                 ->body('Failed to process approval. ' . $e->getMessage())
@@ -382,18 +356,39 @@ class LeaveRequestResource extends Resource
                             ->required(),
                     ])
                     ->visible(fn (LeaveRequest $record): bool =>
-                        auth()->user()->hasAnyRole(['department_head', 'hr_manager', 'chief_executive_officer']) &&
                         in_array($record->status, [
                             LeaveRequest::STATUS_PENDING,
                             LeaveRequest::STATUS_DEPARTMENT_APPROVED,
                             LeaveRequest::STATUS_HR_APPROVED
-                        ])
+                        ]) &&
+                        (
+                            auth()->user()->hasRole('super_admin') ||
+                            (
+                                auth()->user()->hasRole('department_head') &&
+                                $record->status === LeaveRequest::STATUS_PENDING
+                            ) ||
+                            (
+                                auth()->user()->hasRole('hr_manager') &&
+                                $record->status === LeaveRequest::STATUS_DEPARTMENT_APPROVED
+                            ) ||
+                            (
+                                auth()->user()->hasRole('chief_executive_officer') &&
+                                $record->status === LeaveRequest::STATUS_HR_APPROVED &&
+                                $record->isEmployeeDepartmentHead()
+                            )
+                        )
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
                             DB::beginTransaction();
                             $record->reject(auth()->user(), $data['reason']);
                             DB::commit();
+
+                            Notification::make()
+                                ->title('Rejected')
+                                ->body('Leave request has been rejected.')
+                                ->warning()
+                                ->send();
                         } catch (\Exception $e) {
                             DB::rollBack();
                             Notification::make()
@@ -413,12 +408,29 @@ class LeaveRequestResource extends Resource
                             ->label('Cancellation Reason')
                             ->required(),
                     ])
-                    ->visible(fn (LeaveRequest $record): bool => $record->canBeCancelled())
+                    ->visible(fn (LeaveRequest $record): bool =>
+                    (
+                        in_array($record->status, [
+                            LeaveRequest::STATUS_PENDING,
+                            LeaveRequest::STATUS_DEPARTMENT_APPROVED
+                        ]) &&
+                        (
+                            auth()->user()->hasRole('super_admin') ||
+                            $record->employee_id === auth()->user()->employee->id
+                        )
+                    )
+                    )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
                             DB::beginTransaction();
                             $record->cancel(auth()->user(), $data['reason']);
                             DB::commit();
+
+                            Notification::make()
+                                ->title('Cancelled')
+                                ->body('Leave request has been cancelled.')
+                                ->success()
+                                ->send();
                         } catch (\Exception $e) {
                             DB::rollBack();
                             Notification::make()
