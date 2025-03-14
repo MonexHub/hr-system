@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Resources\PerformanceAppraisalResource\Pages;
 use App\Filament\Admin\Resources\PerformanceAppraisalResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
+use App\Models\PerformanceAppraisal;
 
 class ListPerformanceAppraisals extends ListRecords
 {
@@ -22,5 +23,10 @@ class ListPerformanceAppraisals extends ListRecords
     protected function getRedirectUrl(): string
     {
         return $this->getResource()::getUrl('index');
+    }
+
+    public function getRecord(): ?PerformanceAppraisal
+    {
+        return PerformanceAppraisal::find(request()->route('record'));
     }
 }
