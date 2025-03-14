@@ -2,10 +2,12 @@
 
 namespace App\Providers\Filament;
 use App\Filament\Admin\Widgets\HolidayCalendarWidget;
+use App\Filament\Widgets\CustEmployeeOverview;
 use App\Filament\Widgets\EmployeeGenderDistribution;
 use App\Filament\Widgets\EmployeeOverviewWidget;
 use App\Filament\Widgets\RecentNotificationsWidget;
 use App\Helpers\SettingsHelper;
+use App\Models\Employee;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use DiogoGPinto\AuthUIEnhancer\AuthUIEnhancerPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -48,6 +50,13 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->passwordReset()
             ->emailVerification()
+            ->userMenuItems([
+                'profile' => MenuItem::make()
+                    ->label(fn() => auth()->user()->name)
+                    ->url(fn (): string => EditProfilePage::getUrl())
+                    ->icon('heroicon-m-user-circle')
+
+            ])
             ->colors([
                 'primary' => Color::Green,
                 'secondary' => Color::Gray,
@@ -76,6 +85,7 @@ class AdminPanelProvider extends PanelProvider
             // Widget Discovery
 //            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
             ->widgets([
+                CustEmployeeOverview::class,
                 EmployeeOverviewWidget::class,
                 HolidayCalendarWidget::class,
 //                EmployeeGenderDistribution::class,
@@ -117,8 +127,11 @@ class AdminPanelProvider extends PanelProvider
                     ->shouldShowSanctumTokens()
                     ->shouldShowBrowserSessionsForm()
                     ->shouldShowAvatarForm()
-                    ->customProfileComponents([
-                    ]),
+                    ->shouldShowBrowserSessionsForm(
+                        fn() => auth()->user()->id === 1,
+                        //OR
+                        false //optional
+                    )
 //                DashStackThemePlugin::make()
             ])
             // Middleware

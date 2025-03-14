@@ -188,4 +188,9 @@ class OrganizationUnitResource extends Resource
     {
         return auth()->user()->can('view_any_organization_unit') ? 'Organization Management' : null;
     }
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()->hasRole('super_admin');
+    }
 }

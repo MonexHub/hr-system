@@ -189,4 +189,10 @@ class HolidayResource extends Resource
             'edit' => Pages\EditHoliday::route('/{record}/edit'),
         ];
     }
+
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()->hasRole('super_admin');
+    }
 }

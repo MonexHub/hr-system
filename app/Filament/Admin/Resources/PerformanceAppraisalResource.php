@@ -8,6 +8,8 @@ use App\Models\Employee;
 use App\Models\PerformanceAppraisal;
 use Filament\Forms;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 use Filament\Notifications\Collection;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -36,11 +38,24 @@ class PerformanceAppraisalResource extends Resource
                                 ->schema([
                                     Forms\Components\Section::make('Employee Details')
                                         ->schema([
+                                            // Employee select field
+
+                                            // Employee select field
                                             Forms\Components\Select::make('employee_id')
                                                 ->relationship(
                                                     name: 'employee',
                                                     titleAttribute: 'first_name',
-                                                    modifyQueryUsing: fn (Builder $query) => $query->with('department'),
+                                                    modifyQueryUsing: function (Builder $query) {
+                                                        $user = auth()->user();
+
+                                                        // Super admin and HR Manager can see all employees
+                                                        if ($user->hasRole(['super_admin', 'hr_manager'])) {
+                                                            return $query->with('department');
+                                                        }
+
+                                                        // Other users can only see themselves
+                                                        return $query->where('id', $user->employee->id)->with('department');
+                                                    },
                                                 )
                                                 ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
                                                 "{$record->first_name} {$record->last_name}"
@@ -49,13 +64,51 @@ class PerformanceAppraisalResource extends Resource
                                                 ->searchable(['first_name', 'last_name'])
                                                 ->required()
                                                 ->live()
+                                                ->default(function () {
+                                                    $user = auth()->user();
+                                                    // For regular users, default to their own employee ID
+                                                    if (!$user->hasRole(['super_admin', 'hr_manager'])) {
+                                                        return $user->employee->id;
+                                                    }
+                                                    return null;
+                                                })
+                                                ->disabled(function () {
+                                                    $user = auth()->user();
+                                                    // Disable selection for regular users
+                                                    return !$user->hasRole(['super_admin', 'hr_manager']);
+                                                })
                                                 ->afterStateUpdated(function ($state, Forms\Set $set) {
                                                     if ($state) {
-                                                        $employee = Employee::with('department.manager')->find($state);
-                                                        if ($employee) {
-                                                            // Set supervisor from reporting relationship or department manager
-                                                            $supervisor_id = $employee->reporting_to ?? $employee->department?->manager_id;
-                                                            $set('immediate_supervisor_id', $supervisor_id);
+                                                        $employee = Employee::with('department')->find($state);
+                                                        if ($employee && $employee->department) {
+                                                            // Get the department manager (department head)
+                                                            $departmentHeadId = null;
+
+                                                            // First try to get the department's head from the department model
+                                                            // (assuming there's a manager_id or department_head_id column)
+                                                            $department = Department::find($employee->department_id);
+                                                            if ($department && isset($department->manager_id)) {
+                                                                $departmentHeadId = $department->manager_id;
+                                                            }
+
+                                                            // If no department head is set, try to find it through the employee-user-role relationship
+                                                            if (!$departmentHeadId) {
+                                                                $departmentHead = Employee::whereHas('user', function ($query) {
+                                                                    $query->role('department_head');
+                                                                })->where('department_id', $employee->department_id)->first();
+
+                                                                if ($departmentHead) {
+                                                                    $departmentHeadId = $departmentHead->id;
+                                                                }
+                                                            }
+
+                                                            // If we have a department head ID, set it as the supervisor
+                                                            if ($departmentHeadId) {
+                                                                $set('immediate_supervisor_id', $departmentHeadId);
+                                                            } else {
+                                                                // Fall back to reporting relationship if defined
+                                                                $set('immediate_supervisor_id', $employee->reporting_to);
+                                                            }
 
                                                             // Set default dates if they're not set
                                                             $set('evaluation_date', now()->format('Y-m-d'));
@@ -65,6 +118,7 @@ class PerformanceAppraisalResource extends Resource
                                                     }
                                                 }),
 
+// Supervisor select field
                                             Forms\Components\Select::make('immediate_supervisor_id')
                                                 ->relationship(
                                                     name: 'supervisor',
@@ -76,7 +130,9 @@ class PerformanceAppraisalResource extends Resource
                                                 ->preload()
                                                 ->searchable(['first_name', 'last_name'])
                                                 ->required()
-                                                ->disabled(),
+
+
+
                                         ]),
 
                                     Forms\Components\Section::make('Evaluation Period')

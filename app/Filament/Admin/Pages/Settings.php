@@ -13,4 +13,9 @@ class Settings extends Page
     protected static ?int $navigationSort = 100;
 
     protected static string $view = 'filament.admin.pages.settings';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()->hasRole('super_admin');
+    }
 }
