@@ -2,9 +2,19 @@
 
 namespace App\Providers\Filament;
 use App\Filament\Admin\Widgets\HolidayCalendarWidget;
+use App\Filament\Widgets\AttendanceTrendsChart;
+use App\Filament\Widgets\BudgetHeadcountChart;
+use App\Filament\Widgets\ContractDistributionChart;
+use App\Filament\Widgets\ContractExpiryWidget;
 use App\Filament\Widgets\CustEmployeeOverview;
+use App\Filament\Widgets\DepartmentBudgetWidget;
+use App\Filament\Widgets\DepartmentHeadcountChart;
 use App\Filament\Widgets\EmployeeGenderDistribution;
 use App\Filament\Widgets\EmployeeOverviewWidget;
+use App\Filament\Widgets\EmploymentDistributionWidget;
+use App\Filament\Widgets\LeaveDistributionChart;
+use App\Filament\Widgets\LeaveManagementWidget;
+use App\Filament\Widgets\OrganizationalHealthWidget;
 use App\Filament\Widgets\RecentNotificationsWidget;
 use App\Helpers\SettingsHelper;
 use App\Models\Employee;
@@ -86,13 +96,30 @@ class AdminPanelProvider extends PanelProvider
 //            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
             ->widgets([
                 CustEmployeeOverview::class,
-                EmployeeOverviewWidget::class,
+                OrganizationalHealthWidget::class,
+                DepartmentHeadcountChart::class,
+                DepartmentBudgetWidget::class,
+
+                // HR Operations Metrics
+                EmploymentDistributionWidget::class,
+                BudgetHeadcountChart::class,
+
+                // Leave/Time Management (important for HR daily tasks)
+                LeaveManagementWidget::class,
+                LeaveDistributionChart::class,
+                AttendanceTrendsChart::class,
+
+                // Contract Management (important but less urgent)
+                ContractExpiryWidget::class,
+                ContractDistributionChart::class,
+
+                // Auxiliary Information
                 HolidayCalendarWidget::class,
-//                EmployeeGenderDistribution::class,
                 RecentNotificationsWidget::class,
             ])
             ->plugins([
 //                FilamentApexChartsPlugin::make(),
+                FilamentApexChartsPlugin::make(),
                 FilamentShieldPlugin::make()
                     ->gridColumns([
                         'default' => 1,
