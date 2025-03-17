@@ -154,11 +154,7 @@ class AdminPanelProvider extends PanelProvider
                     ->shouldShowSanctumTokens()
                     ->shouldShowBrowserSessionsForm()
                     ->shouldShowAvatarForm()
-                    ->shouldShowBrowserSessionsForm(
-                        fn() => auth()->user()->id === 1,
-                        //OR
-                        false //optional
-                    )
+
 //                DashStackThemePlugin::make()
             ])
             // Middleware
