@@ -8,8 +8,6 @@ use App\Models\Employee;
 use App\Models\PerformanceAppraisal;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
 use Filament\Notifications\Collection;
 use Filament\Resources\Resource;
 use Filament\Tables;
@@ -38,101 +36,70 @@ class PerformanceAppraisalResource extends Resource
                                 ->schema([
                                     Forms\Components\Section::make('Employee Details')
                                         ->schema([
-                                            // Employee select field
-
-                                            // Employee select field
                                             Forms\Components\Select::make('employee_id')
-                                                ->relationship(
-                                                    name: 'employee',
-                                                    titleAttribute: 'first_name',
-                                                    modifyQueryUsing: function (Builder $query) {
-                                                        $user = auth()->user();
-
-                                                        // Super admin and HR Manager can see all employees
-                                                        if ($user->hasRole(['super_admin', 'hr_manager'])) {
-                                                            return $query->with('department');
-                                                        }
-
-                                                        // Other users can only see themselves
-                                                        return $query->where('id', $user->employee->id)->with('department');
-                                                    },
-                                                )
-                                                ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
+                                            ->relationship(
+                                                name: 'employee',
+                                                titleAttribute: 'first_name',
+                                                modifyQueryUsing: fn (Builder $query) => $query->with('department'),
+                                            )
+                                            ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
                                                 "{$record->first_name} {$record->last_name}"
-                                                )
-                                                ->preload()
-                                                ->searchable(['first_name', 'last_name'])
-                                                ->required()
-                                                ->live()
-                                                ->default(function () {
-                                                    $user = auth()->user();
-                                                    // For regular users, default to their own employee ID
-                                                    if (!$user->hasRole(['super_admin', 'hr_manager'])) {
-                                                        return $user->employee->id;
+                                            )
+                                            ->preload()
+                                            ->searchable(['first_name', 'last_name'])
+                                            ->required()
+                                            ->live()
+                                            ->disabled(fn() => Auth::user()->hasRole('employee')) // Employees cannot modify
+                                            ->default(fn() => Auth::user()->hasRole('employee') ? Auth::user()->employee->id : null) // Auto-select employee
+                                            ->dehydrated(fn() => true)
+                                            ->afterStateUpdated(function ($state, Forms\Set $set,$livewire) {
+                                                if ($state) {
+                                                    $employee = Employee::with('department.manager')->find($state);
+                                                    if ($employee) {
+                                                        // Determine supervisor from reporting relationship or department manager
+                                                        $supervisor_id = $employee->reporting_to ?? $employee->department?->manager_id;
+
+                                                            // Ensure supervisor ID is set only if found
+                                                            if ($supervisor_id) {
+                                                                $set('immediate_supervisor_id', $supervisor_id);
+                                                            }
+
+                                                        // Set default dates if they're not set
+                                                        $set('evaluation_date', now()->format('Y-m-d'));
+                                                        $set('evaluation_period_start', now()->startOfMonth()->format('Y-m-d'));
+                                                        $set('evaluation_period_end', now()->endOfMonth()->format('Y-m-d'));
                                                     }
-                                                    return null;
-                                                })
-                                                ->disabled(function () {
-                                                    $user = auth()->user();
-                                                    // Disable selection for regular users
-                                                    return !$user->hasRole(['super_admin', 'hr_manager']);
-                                                })
-                                                ->afterStateUpdated(function ($state, Forms\Set $set) {
-                                                    if ($state) {
-                                                        $employee = Employee::with('department')->find($state);
-                                                        if ($employee && $employee->department) {
-                                                            // Get the department manager (department head)
-                                                            $departmentHeadId = null;
+                                                }
+                                            }),
 
-                                                            // First try to get the department's head from the department model
-                                                            // (assuming there's a manager_id or department_head_id column)
-                                                            $department = Department::find($employee->department_id);
-                                                            if ($department && isset($department->manager_id)) {
-                                                                $departmentHeadId = $department->manager_id;
-                                                            }
-
-                                                            // If no department head is set, try to find it through the employee-user-role relationship
-                                                            if (!$departmentHeadId) {
-                                                                $departmentHead = Employee::whereHas('user', function ($query) {
-                                                                    $query->role('department_head');
-                                                                })->where('department_id', $employee->department_id)->first();
-
-                                                                if ($departmentHead) {
-                                                                    $departmentHeadId = $departmentHead->id;
-                                                                }
-                                                            }
-
-                                                            // If we have a department head ID, set it as the supervisor
-                                                            if ($departmentHeadId) {
-                                                                $set('immediate_supervisor_id', $departmentHeadId);
-                                                            } else {
-                                                                // Fall back to reporting relationship if defined
-                                                                $set('immediate_supervisor_id', $employee->reporting_to);
-                                                            }
-
-                                                            // Set default dates if they're not set
-                                                            $set('evaluation_date', now()->format('Y-m-d'));
-                                                            $set('evaluation_period_start', now()->startOfMonth()->format('Y-m-d'));
-                                                            $set('evaluation_period_end', now()->endOfMonth()->format('Y-m-d'));
-                                                        }
-                                                    }
-                                                }),
-
-// Supervisor select field
-                                            Forms\Components\Select::make('immediate_supervisor_id')
+                                                Forms\Components\Select::make('immediate_supervisor_id')
                                                 ->relationship(
                                                     name: 'supervisor',
                                                     titleAttribute: 'first_name',
                                                 )
                                                 ->getOptionLabelFromRecordUsing(fn (Employee $record) =>
-                                                "{$record->first_name} {$record->last_name}"
+                                                    "{$record->first_name} {$record->last_name}"
                                                 )
                                                 ->preload()
                                                 ->searchable(['first_name', 'last_name'])
                                                 ->required()
-
-
-
+                                                ->disabled()
+                                                ->default(fn () => Auth::user()->hasRole('employee')
+                                                ? Auth::user()->employee->reporting_to ?? Auth::user()->employee->department?->manager_id
+                                                : null
+                                            )
+                                            ->afterStateHydrated(function ($state, Forms\Set $set, $record) {
+                                                if ($record) {
+                                                    $employee = Employee::with('department.manager')->find($record->employee_id);
+                                                    if ($employee) {
+                                                        $supervisor_id = $employee->reporting_to ?? $employee->department?->manager_id;
+                                                        if ($supervisor_id) {
+                                                            $set('immediate_supervisor_id', $supervisor_id);
+                                                        }
+                                                    }
+                                                }
+                                            })
+                                            ->dehydrated(true),
                                         ]),
 
                                     Forms\Components\Section::make('Evaluation Period')
@@ -155,10 +122,51 @@ class PerformanceAppraisalResource extends Resource
                                         ]),
                                 ]),
                         ]),
+                    // Objectives Tab
+                    Forms\Components\Tabs\Tab::make('Objectives')
+                        ->icon('heroicon-m-list-bullet')
+                        ->schema([
+                            Forms\Components\Repeater::make('objectives')
+                                ->relationship('objectives')
+                                ->schema([
+                                    Forms\Components\TextInput::make('objective')
+                                        ->label('Objective Description')
+                                        ->required(),
+                                    Forms\Components\DatePicker::make('completion_date')
+                                        ->label('Completion Date')
+                                        ->required(),
+                                                                        // Rating Field (Only visible to Supervisor or Super Admin)
+                                Forms\Components\Select::make('rating')
+                                ->options([
+                                    1 => '1 - Needs Improvement',
+                                    2 => '2 - Fair',
+                                    3 => '3 - Good',
+                                    4 => '4 - Very Good',
+                                    5 => '5 - Excellent',
+                                ])
+                                ->label('Assessment Rating')
+                                ->visible(fn() =>
+                                    Auth::user()->hasRole('super_admin') ||
+                                    Auth::user()->id === Auth::user()->employee?->reporting_to
+                                ),
 
+                            // Supervisor Feedback Field (Only visible to Supervisor or Super Admin)
+                            Forms\Components\Textarea::make('supervisor_feedback')
+                                ->label('Supervisor Feedback')
+                                ->visible(fn() =>
+                                    Auth::user()->hasRole('super_admin') ||
+                                    Auth::user()->id === Auth::user()->employee?->reporting_to
+                                ),
+                                ])
+                                ->createItemButtonLabel('Add Objective')
+                                ->collapsible(),
+                        ]),
+
+                    // Performance Ratings Tab (Restricted)
                     // Performance Ratings Tab
                     Forms\Components\Tabs\Tab::make('Performance Ratings')
                         ->icon('heroicon-m-star')
+                        ->visible(fn() => Auth::user()->hasRole('super_admin') || Auth::user()->id === Auth::user()->employee?->reporting_to)
                         ->schema([
                             Forms\Components\Section::make('Rating Guide')
                                 ->description('Each competency is rated on a scale of 1-5')
@@ -259,6 +267,7 @@ class PerformanceAppraisalResource extends Resource
                     // Comments & Feedback Tab
                     Forms\Components\Tabs\Tab::make('Comments & Feedback')
                         ->icon('heroicon-m-chat-bubble-left-right')
+                        ->visible(fn() => Auth::user()->hasRole('super_admin') || Auth::user()->id === Auth::user()->employee?->reporting_to)
                         ->schema([
                             Forms\Components\Section::make('Employee Input')
                                 ->schema([
@@ -315,34 +324,28 @@ class PerformanceAppraisalResource extends Resource
                     ->searchable(['first_name', 'last_name'])
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('immediate_supervisor_id')
+                    Tables\Columns\TextColumn::make('supervisor.full_name')
                     ->label('Supervisor')
                     ->formatStateUsing(fn ($record) =>
-                        $record->supervisor?->first_name . ' ' . $record->supervisor?->last_name
+                        $record->supervisor
+                            ? "{$record->supervisor->first_name} {$record->supervisor->last_name}"
+                            : 'Not Assigned'
                     )
-                    ->searchable(query: function (Builder $query, string $search): Builder {
-                        return $query->whereHas('supervisor', function ($query) use ($search) {
-                            $query->where('first_name', 'like', "%{$search}%")
-                                ->orWhere('last_name', 'like', "%{$search}%");
-                        });
-                    })
-                    ->sortable(),
+                    ->sortable()
+                    ->searchable(['supervisor.first_name', 'supervisor.last_name']),
 
                 Tables\Columns\TextColumn::make('evaluation_date')
                     ->label('Evaluation Date')
                     ->date('M d, Y')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('evaluation_period')
+                    Tables\Columns\TextColumn::make('evaluation_period')
                     ->label('Evaluation Period')
-                    ->formatStateUsing(fn (PerformanceAppraisal $record): string =>
-                        optional($record->evaluation_period_start)->format('M Y') . ' - ' .
-                        optional($record->evaluation_period_end)->format('M Y')
-                    )
-                    ->searchable(['evaluation_period_start', 'evaluation_period_end'])
-                    ->sortable('evaluation_period_start'),
+                    ->formatStateUsing(fn (PerformanceAppraisal $record): string => $record->evaluation_period)
+                    ->sortable('evaluation_period_start')
+                    ->searchable(),
 
-                Tables\Columns\TextColumn::make('overall_rating')
+                    Tables\Columns\TextColumn::make('overall_rating')
                     ->badge()
                     ->color(fn ($state): string => match(true) {
                         $state >= 4.5 => 'success',
@@ -351,17 +354,28 @@ class PerformanceAppraisalResource extends Resource
                         default => 'danger',
                     })
                     ->formatStateUsing(fn ($state) => number_format($state, 2))
-                    ->sortable(),
+                    ->sortable()
+                    ->visible(fn ($state) => !is_null($state)),
 
-                Tables\Columns\TextColumn::make('status')
+                    Tables\Columns\TextColumn::make('status')
+                    ->label('Status')
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn ($record) => $record->trashed() ? 'danger' : match ($record->status) {
                         'draft' => 'gray',
                         'submitted' => 'warning',
                         'supervisor_approved' => 'info',
                         'hr_approved', 'completed' => 'success',
                         default => 'gray',
-                    }),
+                    })
+                    ->formatStateUsing(fn ($record) => $record->trashed() ? 'Deleted' : ucfirst($record->status)),
+                    Tables\Columns\TextColumn::make('objectives.objective')
+    ->label('Objectives')
+    ->limit(30),
+Tables\Columns\TextColumn::make('objectives.rating')
+    ->label('Average Rating')
+    ->formatStateUsing(fn ($state) => number_format($state, 2))
+    ->sortable()
+    ->visible(fn ($state) => !is_null($state)),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -393,31 +407,71 @@ class PerformanceAppraisalResource extends Resource
                                 $query->whereDate('evaluation_date', '<=', $date),
                             );
                     }),
+                    Tables\Filters\TrashedFilter::make()
+                ->label('Show Deleted')
+                ->visible(fn () => Auth::user()->hasRole('super_admin')),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-
+                Tables\Actions\EditAction::make()
+                ->visible(fn (PerformanceAppraisal $record) =>
+                ($record->status === 'draft' && Auth::user()->hasRole('employee') && Auth::user()->employee?->id === $record->employee_id) ||
+                Auth::user()->id === $record->employee->reporting_to ||
+                Auth::user()->id === $record->employee->department?->manager_id ||
+                Auth::user()->hasRole('super_admin')
+            ),
                 Tables\Actions\Action::make('submit')
-                    ->action(fn (PerformanceAppraisal $record) => $record->submit())
-                    ->requiresConfirmation()
-                    ->visible(fn (PerformanceAppraisal $record): bool =>
-                        $record->status === 'draft' &&
-                        Auth::user()->can('submit_performance::appraisal')),
+                ->action(fn (PerformanceAppraisal $record) => $record->submit())
+                ->requiresConfirmation()
+                ->visible(fn (PerformanceAppraisal $record): bool =>
+                    !$record->trashed() && $record->status === 'draft' &&
+                    (Auth::user()->can('submit_performance::appraisal') || Auth::user()->hasRole('employee'))
+                ),
 
-                Tables\Actions\Action::make('supervisor_approve')
-                    ->action(fn (PerformanceAppraisal $record) => $record->supervisorApprove())
-                    ->requiresConfirmation()
-                    ->visible(fn (PerformanceAppraisal $record): bool =>
-                        $record->status === 'submitted' &&
-                        Auth::user()->can('supervisor_approve_performance::appraisal')),
-
+            Tables\Actions\Action::make('supervisor_approve')
+                ->action(fn (PerformanceAppraisal $record) => $record->supervisorApprove())
+                ->requiresConfirmation()
+                ->visible(fn (PerformanceAppraisal $record): bool =>
+                    !$record->trashed() && $record->status === 'submitted' &&
+                    (Auth::user()->id === $record->employee->reporting_to ||
+                    Auth::user()->id === $record->employee->department?->manager_id ||
+                    Auth::user()->hasRole('super_admin'))
+                ),
                 Tables\Actions\Action::make('hr_approve')
                     ->action(fn (PerformanceAppraisal $record) => $record->hrApprove())
                     ->requiresConfirmation()
                     ->visible(fn (PerformanceAppraisal $record): bool =>
-                        $record->status === 'supervisor_approved' &&
+                    !$record->trashed() &&  $record->status === 'supervisor_approved' &&
                         Auth::user()->can('hr_approve_performance::appraisal')),
+                        Tables\Actions\Action::make('delete')
+                        ->requiresConfirmation()
+                        ->color('danger')
+                        ->modalHeading('Delete Performance Appraisal')
+                        ->modalDescription('Do you want to permanently delete this appraisal, or just mark it as deleted?')
+                        ->action(fn (PerformanceAppraisal $record, Tables\Actions\Action $action) =>
+                            request()->input('delete_type') === 'permanent'
+                            ? ($record->forceDelete() ?? $action->successNotification('Record permanently deleted'))
+                                : $record->delete()
+                        )
+                        ->modalSubmitActionLabel('Soft Delete')
+                        ->extraModalActions([
+                            Tables\Actions\Action::make('permanent_delete')
+                                ->label('Permanent Delete')
+                                ->color('danger')
+                                ->requiresConfirmation()
+                                ->action(fn (PerformanceAppraisal $record, Tables\Actions\Action $action) =>
+                                    $record->forceDelete() ?? $action->successNotification('Record permanently deleted')
+                                )
+                                ->after(fn () => redirect(request()->header('Referer'))) // Prevents returning to modal
+                        ])
+                        ->visible(fn (PerformanceAppraisal $record): bool =>
+                        (Auth::user()->hasRole('employee') && $record->status === 'draft') ||
+                        (!Auth::user()->hasRole('employee') && $record->status !== 'submitted')
+                        ),
+                        Tables\Actions\Action::make('restore')
+                        ->label('Restore')
+                        ->action(fn (PerformanceAppraisal $record) => $record->restore())
+                        ->visible(fn (PerformanceAppraisal $record) => $record->trashed()),
             ])
             ->defaultSort('evaluation_date', 'desc');
     }
