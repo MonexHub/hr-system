@@ -7,7 +7,6 @@ use App\Traits\PerformanceCalculations;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 
 class PerformanceAppraisal extends Model
@@ -48,16 +47,6 @@ class PerformanceAppraisal extends Model
         'overall_rating' => 'decimal:2',
     ];
 
-
-    /**
-     * Retrieve all records, including soft-deleted ones.
-     *
-     * @return \Illuminate\Database\Eloquent\Collection
-     */
-    public static function getAllIncludingTrashed()
-    {
-        return self::withTrashed()->get();
-    }
 
 
     // Relationships
@@ -181,13 +170,4 @@ class PerformanceAppraisal extends Model
     {
         return $query->where('status', self::STATUS_COMPLETED);
     }
-
-    public function getEvaluationPeriodAttribute()
-{
-    if ($this->evaluation_period_start && $this->evaluation_period_end) {
-        return Carbon::parse($this->evaluation_period_start)->format('M Y') . ' - ' .
-               Carbon::parse($this->evaluation_period_end)->format('M Y');
-    }
-    return 'Not Set';
-}
 }
