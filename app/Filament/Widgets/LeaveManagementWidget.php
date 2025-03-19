@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
 use Filament\Widgets\Widget;
 
@@ -15,6 +16,7 @@ class LeaveManagementWidget extends Widget
     // Set a default polling interval (optional)
     protected int | string | array $columnSpan = 'full';
     protected static ?string $pollingInterval = '30s';
+    use HasWidgetShield;
 
     public function calculateLeaveStats()
     {

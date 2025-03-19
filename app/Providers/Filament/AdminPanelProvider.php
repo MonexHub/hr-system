@@ -9,8 +9,14 @@ use App\Filament\Widgets\ContractExpiryWidget;
 use App\Filament\Widgets\CustEmployeeOverview;
 use App\Filament\Widgets\DepartmentBudgetWidget;
 use App\Filament\Widgets\DepartmentHeadcountChart;
+use App\Filament\Widgets\EmployeeAnnouncementsWidget;
+use App\Filament\Widgets\EmployeeAttendanceSummaryWidget;
+use App\Filament\Widgets\EmployeeDocumentsWidget;
 use App\Filament\Widgets\EmployeeGenderDistribution;
+use App\Filament\Widgets\EmployeeLeaveBalanceWidget;
+use App\Filament\Widgets\EmployeeLeaveRequestsWidget;
 use App\Filament\Widgets\EmployeeOverviewWidget;
+use App\Filament\Widgets\EmployeeProfileSummaryWidget;
 use App\Filament\Widgets\EmploymentDistributionWidget;
 use App\Filament\Widgets\LeaveDistributionChart;
 use App\Filament\Widgets\LeaveManagementWidget;
@@ -68,7 +74,7 @@ class AdminPanelProvider extends PanelProvider
 
             ])
             ->colors([
-                'primary' => Color::Green,
+                'primary' => Color::Amber,
                 'secondary' => Color::Gray,
                 'success' => Color::Green,
                 'warning' => Color::Amber,
@@ -95,27 +101,31 @@ class AdminPanelProvider extends PanelProvider
             // Widget Discovery
 //            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
             ->widgets([
-                CustEmployeeOverview::class,
+                // Priority 1: Employee Overview and Key Metrics
+                EmployeeProfileSummaryWidget::class,
+                EmployeeAttendanceSummaryWidget::class,
                 OrganizationalHealthWidget::class,
-                DepartmentHeadcountChart::class,
-                DepartmentBudgetWidget::class,
-
-                // HR Operations Metrics
                 EmploymentDistributionWidget::class,
-                BudgetHeadcountChart::class,
 
-                // Leave/Time Management (important for HR daily tasks)
+                // Priority 2: Performance and Attendance Management
                 LeaveManagementWidget::class,
-                LeaveDistributionChart::class,
                 AttendanceTrendsChart::class,
+                EmployeeLeaveRequestsWidget::class,
+                EmployeeLeaveBalanceWidget::class,
+                LeaveDistributionChart::class,
 
-                // Contract Management (important but less urgent)
-                ContractExpiryWidget::class,
+                // Priority 3: Workforce Planning and Budget
+                DepartmentHeadcountChart::class,
+                BudgetHeadcountChart::class,
+                DepartmentBudgetWidget::class,
                 ContractDistributionChart::class,
+                ContractExpiryWidget::class,
 
-                // Auxiliary Information
-                HolidayCalendarWidget::class,
+                // Priority 4: Communication and Announcements
+                EmployeeAnnouncementsWidget::class,
                 RecentNotificationsWidget::class,
+                EmployeeDocumentsWidget::class,
+                HolidayCalendarWidget::class,
             ])
             ->plugins([
 //                FilamentApexChartsPlugin::make(),

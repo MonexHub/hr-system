@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Employee;
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\DB;
 
@@ -14,6 +15,7 @@ class EmploymentDistributionWidget extends Widget
     // Set a default polling interval (optional)
     protected static ?string $pollingInterval = '30s';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
     public function calculateDistributionStats()
     {

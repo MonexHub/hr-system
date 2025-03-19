@@ -4,24 +4,21 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
 
         <style>
-            /* Matching the consistent card styles */
+            /* Compact card styles with original width */
             .card-container {
                 position: relative;
-                height: 100%;
+                max-width: 100%;
+                width: 100%; /* Maintain original width */
             }
 
             .card {
                 background-color: white;
                 border-radius: 12px;
                 box-shadow: 0 6px 12px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                position: relative;
-                overflow: hidden;
-                max-width: 100%;
-                transition: all 0.3s ease;
                 border: 1px solid rgba(229, 231, 235, 0.5);
-                height: 100%;
-                display: flex;
-                flex-direction: column;
+                overflow: hidden;
+                transition: all 0.3s ease;
+                padding: 10px;
             }
 
             .card:hover {
@@ -30,14 +27,14 @@
             }
 
             .dark .card {
-                background-color: #1f2937;
                 border-color: rgba(75, 85, 99, 0.5);
-                box-shadow: 0 6px 12px -3px rgba(0, 0, 0, 0.7), 0 4px 6px -2px rgba(0, 0, 0, 0.5);
+                background-color: #27272a;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.4);
             }
 
             .icon-bg {
-                width: 46px;
-                height: 46px;
+                width: 40px;
+                height: 40px;
                 border-radius: 12px;
                 display: flex;
                 align-items: center;
@@ -55,7 +52,7 @@
 
             .card-title {
                 color: #6b7280;
-                font-size: 0.8rem;
+                font-size: 0.65rem;
                 font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.05em;
@@ -67,9 +64,9 @@
             }
 
             .card-value {
-                font-size: 1.75rem;
+                font-size: 0.85rem;
                 font-weight: 700;
-                color: #111827;
+                color: #1f2937;
                 margin-top: 0.25rem;
                 transition: all 0.3s ease;
                 line-height: 1.1;
@@ -88,7 +85,7 @@
             }
 
             .card-subtitle {
-                font-size: 0.75rem;
+                font-size: 0.6rem;
                 color: #6b7280;
                 margin-top: 0.25rem;
                 white-space: nowrap;
@@ -103,14 +100,14 @@
 
             .card-divider {
                 border-top: 1px solid rgba(220,169,21,0.3);
-                margin: 12px 0;
+                margin: 6px 0;
                 opacity: 0.3;
             }
 
             .widget-title {
-                font-size: 1.25rem;
+                font-size: 0.8rem;
                 font-weight: 700;
-                color: #111827;
+                color: rgba(220,169,21,1);
                 margin-bottom: 0;
                 position: relative;
                 padding-bottom: 0.5rem;
@@ -129,14 +126,13 @@
             }
 
             .dark .widget-title {
-                color: #f3f4f6;
+                color: rgba(220,169,21,0.9);
             }
 
             .card-tooltip {
                 visibility: hidden;
                 width: 250px;
-                background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-                color: #ffffff;
+                color: #1f2937;
                 text-align: left;
                 border-radius: 10px;
                 padding: 14px;
@@ -148,11 +144,18 @@
                 opacity: 0;
                 transition: opacity 0.3s, transform 0.3s;
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
-                font-size: 0.875rem;
+                font-size: 0.65rem;
                 line-height: 1.5;
                 transform: translateY(10px);
-                border: 1px solid rgba(75, 85, 99, 0.3);
+                border: 1px solid rgba(229, 231, 235, 0.5);
                 pointer-events: none;
+                background-color: white;
+            }
+
+            .dark .card-tooltip {
+                background-color: #27272a;
+                color: #f3f4f6;
+                border-color: rgba(75, 85, 99, 0.5);
             }
 
             .card-tooltip::after {
@@ -163,7 +166,11 @@
                 margin-left: -8px;
                 border-width: 8px;
                 border-style: solid;
-                border-color: #111827 transparent transparent transparent;
+                border-color: white transparent transparent transparent;
+            }
+
+            .dark .card-tooltip::after {
+                border-color: #27272a transparent transparent transparent;
             }
 
             .card-container:hover .card-tooltip {
@@ -173,9 +180,9 @@
             }
 
             .card i {
-                font-size: 1.25rem;
+                font-size: 0.85rem;
                 transition: all 0.3s ease;
-                color: rgba(220,169,21,1);
+                color: rgba(220,169,21,1) !important; /* Force gold color on all icons */
             }
 
             .card:hover i {
@@ -192,7 +199,7 @@
             .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                gap: 0.75rem;
+                gap: 8px;
             }
 
             @media (max-width: 640px) {
@@ -205,9 +212,10 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                margin-bottom: 0.75rem;
-                border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+                margin-bottom: 6px;
+                border-bottom: 1px solid rgba(220,169,21,0.3);
                 padding-bottom: 0.5rem;
+                opacity: 0.3;
             }
 
             .dark .header-container {
@@ -215,11 +223,11 @@
             }
 
             .refresh-hint {
-                font-size: 0.7rem;
+                font-size: 0.6rem;
                 color: #6b7280;
                 display: flex;
                 align-items: center;
-                gap: 0.25rem;
+                gap: 5px;
             }
 
             .dark .refresh-hint {
@@ -228,6 +236,19 @@
 
             .refresh-icon {
                 animation: spin 2s linear infinite;
+                color: rgba(220,169,21,0.7) !important; /* Force gold color */
+            }
+
+            .info-text {
+                font-size: 0.55rem;
+                font-weight: 600;
+                color: #6b7280;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+
+            .dark .info-text {
+                color: #9ca3af;
             }
 
             @keyframes spin {
@@ -275,7 +296,7 @@
             <div class="header-container mb-3">
                 <h1 class="widget-title mb-0 pb-2">Department Budget Overview</h1>
                 <div class="refresh-hint">
-                    <i class="fas fa-sync-alt refresh-icon text-[rgba(220,169,21,0.7)]"></i>
+                    <i class="fas fa-sync-alt refresh-icon"></i>
                     <span>Auto-refreshes every 30 seconds</span>
                 </div>
             </div>
@@ -286,14 +307,12 @@
                         'total_budget' => [
                             'title' => 'Total Budget',
                             'icon' => 'fas fa-money-bill-wave',
-                            'iconColor' => 'text-[rgba(220,169,21,1)]',
                             'amount' => 'TSh ' . number_format(isset($stats['total_budget']) ? $stats['total_budget'] : 0, 0),
                             'description' => 'Combined annual budget across all departments'
                         ],
                         'top_department' => [
                             'title' => 'Top Department',
                             'icon' => 'fas fa-trophy',
-                            'iconColor' => 'text-[rgba(220,169,21,1)]',
                             'amount' => 'TSh ' . number_format(isset($stats['top_department']['budget']) ? $stats['top_department']['budget'] : 0, 0),
                             'subtitle' => isset($stats['top_department']['name']) ? $stats['top_department']['name'] : 'N/A',
                             'description' => 'Department with the highest allocated budget'
@@ -301,14 +320,12 @@
                         'avg_budget_per_employee' => [
                             'title' => 'Avg Budget/Employee',
                             'icon' => 'fas fa-user-tag',
-                            'iconColor' => 'text-[rgba(220,169,21,1)]',
                             'amount' => 'TSh ' . number_format(isset($stats['avg_budget_per_employee']) ? $stats['avg_budget_per_employee'] : 0, 0),
                             'description' => 'Average budget allocated per active employee'
                         ],
                         'departments_with_low_utilization' => [
                             'title' => 'Low Utilization Depts',
                             'icon' => 'fas fa-balance-scale',
-                            'iconColor' => 'text-[rgba(220,169,21,1)]',
                             'amount' => number_format(isset($stats['departments_with_low_utilization']) ? $stats['departments_with_low_utilization'] : 0),
                             'description' => 'Departments with low headcount utilization (<70%) but high budget allocation'
                         ]
@@ -334,11 +351,11 @@
                                     </div>
                                 </div>
 
-                                <div class="card-divider mt-3 opacity-30"></div>
+                                <div class="card-divider mt-3"></div>
 
-                                <div class="text-xs text-gray-500 mt-2">
-                                    <span class="inline-flex items-center">
-                                        <i class="fas fa-info-circle mr-1 text-[rgba(220,169,21,0.8)]"></i>
+                                <div class="mt-2">
+                                    <span class="inline-flex items-center info-text">
+                                        <i class="fas fa-info-circle mr-1 text-xs"></i>
                                         Click for details
                                     </span>
                                 </div>

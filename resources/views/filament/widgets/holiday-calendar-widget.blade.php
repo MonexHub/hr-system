@@ -1,97 +1,367 @@
 {{-- resources/views/filament/widgets/holiday-calendar-widget.blade.php --}}
 <x-filament-widgets::widget>
-    <x-filament::section class="!p-0 !rounded-lg !border-0 !ring-1 !ring-gray-200 dark:!ring-gray-700 bg-white dark:bg-gray-900" s>
-        <div class="flex items-center justify-between gap-4 p-6 bg-primary-50/30 dark:bg-slate-900 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2 text-primary-600 dark:text-primary-400">
-                <x-heroicon-o-calendar class="w-6 h-6 text-primary-500 dark:text-primary-400" />
-                {{ app()->getLocale() === 'sw' ? 'Matukio Yanayokuja' : 'Upcoming Events' }}
-            </h2>
+    <x-filament::section>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
 
-            <div class="flex gap-2 items-center">
-                <x-filament::badge
-                    icon="heroicon-o-sparkles"
-                    color="primary"
-                    class="ring-1 ring-primary-500/20 dark:ring-primary-400/20"
-                >
-                    {{ $this->events->count() }} {{ app()->getLocale() === 'sw' ? 'Matukio' : 'Events' }}
-                </x-filament::badge>
+        <style>
+            /* Compact card styles with original width */
+            .card-container {
+                position: relative;
+                max-width: 100%;
+                width: 100%; /* Maintain original width */
+            }
+
+            .card {
+                background-color: white;
+                border-radius: 12px;
+                box-shadow: 0 6px 12px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+                border: 1px solid rgba(229, 231, 235, 0.5);
+                overflow: hidden;
+                transition: all 0.3s ease;
+            }
+
+            .dark .card {
+                border-color: rgba(75, 85, 99, 0.5);
+                background-color: #27272a;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.4);
+            }
+
+            .widget-title {
+                font-size: 0.8rem;
+                font-weight: 700;
+                color: rgba(220,169,21,1);
+                margin-bottom: 0;
+                position: relative;
+                padding-bottom: 0.5rem;
+                display: inline-block;
+            }
+
+            .widget-title:after {
+                content: '';
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                width: 50px;
+                height: 3px;
+                background: linear-gradient(90deg, rgba(220,169,21,1) 0%, rgba(220,169,21,0.5) 100%);
+                border-radius: 2px;
+            }
+
+            .dark .widget-title {
+                color: rgba(220,169,21,0.9);
+            }
+
+            .header-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 6px;
+                border-bottom: 1px solid rgba(220,169,21,0.3);
+                padding-bottom: 0.5rem;
+                opacity: 0.3;
+            }
+
+            .dark .header-container {
+                border-color: rgba(75, 85, 99, 0.5);
+            }
+
+            .events-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.25rem;
+                padding: 0.2rem 0.5rem;
+                border-radius: 9999px;
+                font-size: 0.55rem;
+                font-weight: 600;
+                background-color: rgba(220,169,21,0.1);
+                color: rgba(220,169,21,1);
+                border: 1px solid rgba(220,169,21,0.2);
+            }
+
+            .dark .events-badge {
+                background-color: rgba(220,169,21,0.15);
+                border-color: rgba(220,169,21,0.3);
+            }
+
+            .empty-events {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 1rem;
+                color: #6b7280;
+                font-size: 0.65rem;
+                background-color: rgba(229, 231, 235, 0.3);
+                border-radius: 0.5rem;
+                margin: 0.75rem 0;
+                border: 1px solid rgba(229, 231, 235, 0.5);
+            }
+
+            .dark .empty-events {
+                color: #9ca3af;
+                background-color: rgba(75, 85, 99, 0.2);
+                border-color: rgba(75, 85, 99, 0.5);
+            }
+
+            .event-container {
+                border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+                transition: all 0.3s ease;
+            }
+
+            .event-container:last-child {
+                border-bottom: none;
+            }
+
+            .event-container:hover {
+                background-color: rgba(220,169,21,0.05);
+            }
+
+            .dark .event-container {
+                border-color: rgba(75, 85, 99, 0.5);
+            }
+
+            .dark .event-container:hover {
+                background-color: rgba(220,169,21,0.1);
+            }
+
+            .event-header {
+                width: 100%;
+                padding: 0.75rem 1rem;
+                text-align: left;
+                display: flex;
+                align-items: flex-start;
+                gap: 0.75rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                outline: none;
+            }
+
+            .event-header:focus {
+                background-color: rgba(220,169,21,0.05);
+            }
+
+            .dark .event-header:focus {
+                background-color: rgba(220,169,21,0.1);
+            }
+
+            .event-title {
+                font-size: 0.65rem;
+                font-weight: 600;
+                color: #1f2937;
+                margin: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .dark .event-title {
+                color: #f3f4f6;
+            }
+
+            .event-meta {
+                font-size: 0.55rem;
+                color: #6b7280;
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                margin-top: 0.25rem;
+            }
+
+            .dark .event-meta {
+                color: #9ca3af;
+            }
+
+            .event-meta-item {
+                display: flex;
+                align-items: center;
+                gap: 0.25rem;
+            }
+
+            .event-body {
+                padding: 0 1rem 1rem 1rem;
+                margin-top: -0.5rem;
+            }
+
+            .event-description {
+                font-size: 0.6rem;
+                color: #4b5563;
+                border-left: 2px solid rgba(220,169,21,0.5);
+                padding-left: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+
+            .dark .event-description {
+                color: #9ca3af;
+                border-left-color: rgba(220,169,21,0.3);
+            }
+
+            .event-participants {
+                font-size: 0.55rem;
+                color: #6b7280;
+                display: flex;
+                align-items: center;
+                gap: 0.25rem;
+                margin-top: 0.5rem;
+            }
+
+            .dark .event-participants {
+                color: #9ca3af;
+            }
+
+            .events-container {
+                max-height: 300px;
+                overflow-y: auto;
+            }
+
+            .footer {
+                font-size: 0.55rem;
+                color: #6b7280;
+                padding: 0.75rem 1rem;
+                border-top: 1px solid rgba(229, 231, 235, 0.5);
+                background-color: rgba(229, 231, 235, 0.1);
+            }
+
+            .dark .footer {
+                color: #9ca3af;
+                border-color: rgba(75, 85, 99, 0.5);
+                background-color: rgba(75, 85, 99, 0.2);
+            }
+
+            .day-badge {
+                display: inline-flex;
+                padding: 0.1rem 0.4rem;
+                border-radius: 9999px;
+                font-size: 0.55rem;
+                font-weight: 600;
+                text-transform: capitalize;
+            }
+
+            .badge-success {
+                background-color: rgba(16, 185, 129, 0.1);
+                color: rgb(16, 185, 129);
+            }
+
+            .badge-warning {
+                background-color: rgba(245, 158, 11, 0.1);
+                color: rgb(245, 158, 11);
+            }
+
+            .badge-danger {
+                background-color: rgba(239, 68, 68, 0.1);
+                color: rgb(239, 68, 68);
+            }
+
+            .badge-primary {
+                background-color: rgba(220,169,21,0.1);
+                color: rgba(220,169,21,1);
+            }
+
+            .rotate-icon {
+                transition: transform 0.3s ease;
+            }
+
+            .rotate-180 {
+                transform: rotate(180deg);
+            }
+
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+
+            .event-container {
+                animation: fadeIn 0.3s ease-out forwards;
+            }
+        </style>
+
+        <div class="container mx-auto">
+            <div class="header-container mb-3">
+                <h1 class="widget-title mb-0 pb-2">
+                    <i class="fas fa-calendar mr-2"></i>
+                    {{ app()->getLocale() === 'sw' ? 'Matukio Yanayokuja' : 'Upcoming Events' }}
+                </h1>
+                <div class="events-badge">
+                    <i class="fas fa-sparkles text-xs"></i>
+                    <span>{{ $this->events->count() }} {{ app()->getLocale() === 'sw' ? 'Matukio' : 'Events' }}</span>
+                </div>
             </div>
-        </div>
 
-        @if($this->events->isEmpty())
-            <x-filament::section class="mx-6 mb-6 bg-gray-50/50 dark:bg-gray-700/50 ring-1 ring-gray-200 dark:ring-gray-700">
-                <div class="flex items-center justify-center p-4 text-sm text-gray-600 dark:text-gray-300">
-                    <x-heroicon-o-calendar class="w-5 h-5 mr-2 text-gray-400 dark:text-gray-500" />
+            @if($this->events->isEmpty())
+                <div class="empty-events">
+                    <i class="fas fa-calendar-xmark mr-2"></i>
                     {{ app()->getLocale() === 'sw'
                         ? 'Hakuna matukio yanayokuja kwa siku 30 zijazo'
                         : 'No upcoming events in the next 30 days'
                     }}
                 </div>
-            </x-filament::section>
-        @else
-            <div class="divide-y divide-gray-200 dark:divide-gray-700 overflow-y-auto max-h-96">
-                @foreach($this->events as $event)
-                    <div x-data="{ open: false }" class="group hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
-                        <button
-                            @click="open = !open"
-                            class="w-full px-6 py-4 text-left flex items-center gap-4 focus:ring-2 focus:ring-primary-500/50 focus:outline-none"
-                        >
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-3">
-                                    <x-filament::badge
-                                        :color="$event['badge']"
-                                        class="shrink-0 ring-1 ring-{!! $event['badge'] !!}-500/20 dark:ring-{!! $event['badge'] !!}-400/20"
-                                    >
-                                        {{ $event['daysUntil'] }}
-                                    </x-filament::badge>
-
-                                    <span class="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                        {{ $event['title'] }}
-                                    </span>
-                                </div>
-
-                                <div class="mt-2 flex items-center gap-2 text-sm">
-                                    <span class="text-gray-600 dark:text-gray-400">
-                                        <x-heroicon-o-clock class="w-4 h-4 inline mr-1 text-gray-500 dark:text-gray-400" />
-                                        {{ \Carbon\Carbon::parse($event['date'])->format('M j, Y') }}
-                                    </span>
-
-                                    @if(isset($event['location']))
-                                        <span class="text-gray-400 dark:text-gray-600">•</span>
-                                        <span class="text-gray-600 dark:text-gray-400">
-                                            <x-heroicon-o-map-pin class="w-4 h-4 inline mr-1 text-gray-500 dark:text-gray-400" />
-                                            {{ $event['location'] }}
+            @else
+                <div class="events-container">
+                    @foreach($this->events as $event)
+                        <div x-data="{ open: false }" class="event-container">
+                            <button
+                                @click="open = !open"
+                                class="event-header"
+                            >
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="day-badge {{ $event['badge'] === 'primary' ? 'badge-primary' : ($event['badge'] === 'danger' ? 'badge-danger' : ($event['badge'] === 'warning' ? 'badge-warning' : 'badge-success')) }}">
+                                            {{ $event['daysUntil'] }}
                                         </span>
-                                    @endif
+
+                                        <span class="event-title">
+                                            {{ $event['title'] }}
+                                        </span>
+                                    </div>
+
+                                    <div class="event-meta">
+                                        <span class="event-meta-item">
+                                            <i class="fas fa-clock text-xs" style="color: rgba(220,169,21,0.8) !important;"></i>
+                                            {{ \Carbon\Carbon::parse($event['date'])->format('M j, Y') }}
+                                        </span>
+
+                                        @if(isset($event['location']))
+                                            <span class="text-gray-400 dark:text-gray-600">•</span>
+                                            <span class="event-meta-item">
+                                                <i class="fas fa-map-pin text-xs" style="color: rgba(220,169,21,0.8) !important;"></i>
+                                                {{ $event['location'] }}
+                                            </span>
+                                        @endif
+                                    </div>
                                 </div>
+
+                                <div class="shrink-0 rotate-icon" :class="{ 'rotate-180': open }">
+                                    <i class="fas fa-chevron-down text-xs" style="color: rgba(220,169,21,0.8) !important;"></i>
+                                </div>
+                            </button>
+
+                            <div x-show="open" x-collapse class="event-body">
+                                @if(isset($event['description']) && $event['description'])
+                                    <div class="event-description">
+                                        {{ $event['description'] }}
+                                    </div>
+                                @endif
+
+                                @if(isset($event['participants']))
+                                    <div class="event-participants">
+                                        <i class="fas fa-users text-xs" style="color: rgba(220,169,21,0.8) !important;"></i>
+                                        {{ implode(', ', $event['participants']) }}
+                                    </div>
+                                @endif
                             </div>
-
-                            <div class="shrink-0 transform transition-transform" :class="{ 'rotate-180': open }">
-                                <x-heroicon-o-chevron-down class="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                            </div>
-                        </button>
-
-                        <div x-show="open" x-collapse class="px-6 pb-4 -mt-2">
-                            @if(isset($event['description']) && $event['description'])
-                                <div class="prose prose-sm max-w-none border-l-2 border-primary-200 dark:border-primary-400/50 pl-4 text-gray-700 dark:text-gray-300">
-                                    {{ $event['description'] }}
-                                </div>
-                            @endif
-
-                            @if(isset($event['participants']))
-                                <div class="mt-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                    <x-heroicon-o-user-group class="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                                    {{ implode(', ', $event['participants']) }}
-                                </div>
-                            @endif
                         </div>
-                    </div>
-                @endforeach
-            </div>
-        @endif
+                    @endforeach
+                </div>
+            @endif
 
-        <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-slate-900">
-            <div class="text-sm text-gray-500 dark:text-gray-400">
+            <div class="footer">
+                <i class="fas fa-info-circle text-xs mr-1" style="color: rgba(220,169,21,0.8) !important;"></i>
                 {{ app()->getLocale() === 'sw'
                     ? '* Yaliyoonyeshwa ni matukio ya siku 30 zijazo'
                     : '* Showing events within next 30 days'

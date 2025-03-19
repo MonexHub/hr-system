@@ -4,6 +4,9 @@ namespace App\Filament\Admin\Resources\EmployeeResource\Pages;
 
 use App\Filament\Admin\Resources\EmployeeResource;
 use App\Filament\Imports\EmployeeImporter;
+use App\Filament\Widgets\EmployeeAttendanceSummaryWidget;
+use App\Filament\Widgets\EmployeeProfileSummaryWidget;
+use App\Filament\Widgets\EmploymentDistributionWidget;
 use Filament\Actions;
 use Filament\Actions\ImportAction;
 use Filament\Resources\Pages\ListRecords;
@@ -11,6 +14,13 @@ use Filament\Resources\Pages\ListRecords;
 class ListEmployees extends ListRecords
 {
     protected static string $resource = EmployeeResource::class;
+
+    protected function getHeaderWidgets(): array
+    {
+        return[
+            EmploymentDistributionWidget::class
+        ];
+    }
 
     protected function getHeaderActions(): array
     {

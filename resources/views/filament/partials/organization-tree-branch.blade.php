@@ -9,6 +9,7 @@
                     <div @class([
                         'flex-shrink-0 p-2 rounded-lg',
                         'bg-primary-500/10' => $unit->unit_type === 'company',
+                        'bg-primary-500/10' => $unit->unit_type === 'company',
                         'bg-success-500/10' => $unit->unit_type === 'division',
                         'bg-warning-500/10' => $unit->unit_type === 'department',
                         'bg-info-500/10' => $unit->unit_type === 'team',

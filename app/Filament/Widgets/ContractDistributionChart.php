@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Employee;
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Leandrocfe\FilamentApexCharts\Widgets\ApexChartWidget;
 use Illuminate\Support\Facades\DB;
 
@@ -16,6 +17,7 @@ class ContractDistributionChart extends ApexChartWidget
      */
     protected static ?string $chartId = 'contractDistributionChart';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
     /**
      * Widget Title

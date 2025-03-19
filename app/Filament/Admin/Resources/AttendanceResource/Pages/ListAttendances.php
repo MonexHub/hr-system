@@ -3,6 +3,7 @@
 namespace App\Filament\Admin\Resources\AttendanceResource\Pages;
 
 use App\Filament\Admin\Resources\AttendanceResource;
+use App\Filament\Widgets\EmployeeAttendanceSummaryWidget;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Services\AttendanceService;
@@ -23,6 +24,13 @@ use Illuminate\Database\Eloquent\Builder;
 class ListAttendances extends ListRecords
 {
     protected static string $resource = AttendanceResource::class;
+
+    protected function getHeaderWidgets(): array
+    {
+        return[
+            EmployeeAttendanceSummaryWidget::class
+        ];
+    }
 
     protected function getHeaderActions(): array
     {

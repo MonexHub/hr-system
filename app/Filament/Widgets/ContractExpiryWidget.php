@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Carbon\Carbon;
 use Filament\Widgets\Widget;
 
@@ -12,6 +13,7 @@ class ContractExpiryWidget extends Widget
 
     // Set a default polling interval (optional)
     protected static ?string $pollingInterval = '30s';
+    use HasWidgetShield;
     protected int | string | array $columnSpan = 'full';
 
     public function calculateContractStats()

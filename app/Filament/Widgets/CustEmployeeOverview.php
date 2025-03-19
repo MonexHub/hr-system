@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,7 @@ class CustEmployeeOverview extends Widget
 
     // Set polling interval to 4 seconds as in your original template
     protected static ?string $pollingInterval = '4s';
+    use HasWidgetShield;
 
     protected int | string | array $columnSpan = 'full';
     // Sort order for dashboard

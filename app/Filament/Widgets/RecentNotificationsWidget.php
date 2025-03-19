@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\NotificationLog;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,7 +13,8 @@ class RecentNotificationsWidget extends Widget
     protected static string $view = 'filament.widgets.recent-notifications-widget';
 
     protected int | string | array $columnSpan = 'half';
-    protected static ?int $sort = 2;
+    use HasWidgetShield;
+//    protected static ?int $sort = 2;
 
     // Add polling for real-time updates
     protected static ?string $pollingInterval = '15s';

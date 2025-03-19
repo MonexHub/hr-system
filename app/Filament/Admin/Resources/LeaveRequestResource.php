@@ -177,6 +177,51 @@ class LeaveRequestResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->toggleable(),
+                Tables\Columns\TextColumn::make('employee.full_name')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('pending_approver')
+                    ->label('Pending Approver')
+                    ->getStateUsing(function (LeaveRequest $record): string {
+                        if ($record->status === LeaveRequest::STATUS_PENDING) {
+                            // For regular employees, the department head approves first
+                            if (!$record->isEmployeeDepartmentHead()) {
+                                $departmentHead = \App\Models\User::role('department_head')
+                                    ->whereHas('employee', function ($query) use ($record) {
+                                        $query->where('department_id', $record->employee->department_id);
+                                    })
+                                    ->first();
+
+                                return $departmentHead
+                                    ? "{$departmentHead->name} (HOD)"
+                                    : "Department Head";
+                            } else {
+                                // Department heads skip to HR approval
+                                $hrManagers = \App\Models\User::role('hr_manager')->get();
+                                $hrNames = $hrManagers->pluck('name')->implode(', ');
+
+                                return !empty($hrNames) ? $hrNames : "HR Manager";
+                            }
+                        } elseif ($record->status === LeaveRequest::STATUS_DEPARTMENT_APPROVED) {
+                            $hrManagers = \App\Models\User::role('hr_manager')->get();
+                            $hrNames = $hrManagers->pluck('name')->implode(', ');
+
+                            return !empty($hrNames) ? $hrNames : "HR Manager";
+                        } elseif ($record->status === LeaveRequest::STATUS_HR_APPROVED) {
+                            $ceo = \App\Models\User::role('chief_executive_officer')->first();
+
+                            return $ceo ? $ceo->name : "CEO";
+                        } elseif (in_array($record->status, [
+                            LeaveRequest::STATUS_APPROVED,
+                            LeaveRequest::STATUS_REJECTED,
+                            LeaveRequest::STATUS_CANCELLED
+                        ])) {
+                            return "Completed";
+                        }
+
+                        return "N/A";
+                    }),
 
                 Tables\Columns\TextColumn::make('leaveType.name')
                     ->label('Leave Type')
@@ -238,7 +283,6 @@ class LeaveRequestResource extends Resource
                     }),
             ])
             ->actions([
-                // Department Head Approval Action
                 Tables\Actions\Action::make('approve_department')
                     ->label('Approve (HOD)')
                     ->icon('heroicon-o-check-circle')
@@ -254,26 +298,29 @@ class LeaveRequestResource extends Resource
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
-                            DB::beginTransaction();
-                            $record->approveDepartment(auth()->user(), $data['remarks']);
-                            DB::commit();
+                            // Dispatch the job to process the approval asynchronously
+                            \App\Jobs\ProcessLeaveApproval::dispatch(
+                                $record->id,
+                                auth()->id(),
+                                $data['remarks'],
+                                'department'
+                            );
 
                             Notification::make()
-                                ->title('Approved')
-                                ->body('Leave request has been approved by Department Head.')
+                                ->title('Processing')
+                                ->body('Leave request is being processed for approval. You will be notified when complete.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
-                                ->body('Failed to process approval. ' . $e->getMessage())
+                                ->body('Failed to queue approval. ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
 
-                // HR Approval Action
+// HR Approval Action
                 Tables\Actions\Action::make('approve_hr')
                     ->label('Approve (HR)')
                     ->icon('heroicon-o-check-circle')
@@ -289,28 +336,29 @@ class LeaveRequestResource extends Resource
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
-                            DB::beginTransaction();
-                            $record->approveHR(auth()->user(), $data['remarks']);
-                            DB::commit();
+                            // Dispatch the job to process the approval asynchronously
+                            \App\Jobs\ProcessLeaveApproval::dispatch(
+                                $record->id,
+                                auth()->id(),
+                                $data['remarks'],
+                                'hr'
+                            );
 
                             Notification::make()
-                                ->title('Approved')
-                                ->body($record->isEmployeeDepartmentHead()
-                                    ? 'Leave request approved by HR and forwarded to CEO.'
-                                    : 'Leave request has been fully approved by HR.')
+                                ->title('Processing')
+                                ->body('Leave request is being processed for HR approval. You will be notified when complete.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
-                                ->body('Failed to process approval. ' . $e->getMessage())
+                                ->body('Failed to queue approval. ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
 
-                // CEO Approval Action
+// CEO Approval Action
                 Tables\Actions\Action::make('approve_ceo')
                     ->label('Approve (CEO)')
                     ->icon('heroicon-o-check-circle')
@@ -327,26 +375,29 @@ class LeaveRequestResource extends Resource
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
-                            DB::beginTransaction();
-                            $record->approveCEO(auth()->user(), $data['remarks']);
-                            DB::commit();
+                            // Dispatch the job to process the approval asynchronously
+                            \App\Jobs\ProcessLeaveApproval::dispatch(
+                                $record->id,
+                                auth()->id(),
+                                $data['remarks'],
+                                'ceo'
+                            );
 
                             Notification::make()
-                                ->title('Approved')
-                                ->body('Leave request has been fully approved by CEO.')
+                                ->title('Processing')
+                                ->body('Leave request is being processed for CEO approval. You will be notified when complete.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
-                                ->body('Failed to process approval. ' . $e->getMessage())
+                                ->body('Failed to queue approval. ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
 
-                // Reject Action
+// Reject Action
                 Tables\Actions\Action::make('reject')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
@@ -380,26 +431,29 @@ class LeaveRequestResource extends Resource
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
-                            DB::beginTransaction();
-                            $record->reject(auth()->user(), $data['reason']);
-                            DB::commit();
+                            // Dispatch the job to process the rejection asynchronously
+                            \App\Jobs\ProcessLeaveApproval::dispatch(
+                                $record->id,
+                                auth()->id(),
+                                $data['reason'],
+                                'reject'
+                            );
 
                             Notification::make()
-                                ->title('Rejected')
-                                ->body('Leave request has been rejected.')
+                                ->title('Processing')
+                                ->body('Leave request is being processed for rejection. You will be notified when complete.')
                                 ->warning()
                                 ->send();
                         } catch (\Exception $e) {
-                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
-                                ->body('Failed to reject leave request. Please try again.')
+                                ->body('Failed to queue rejection. ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
 
-                // Cancel Action
+            // Cancel Action
                 Tables\Actions\Action::make('cancel')
                     ->icon('heroicon-o-x-mark')
                     ->color('gray')
@@ -422,20 +476,23 @@ class LeaveRequestResource extends Resource
                     )
                     ->action(function (LeaveRequest $record, array $data): void {
                         try {
-                            DB::beginTransaction();
-                            $record->cancel(auth()->user(), $data['reason']);
-                            DB::commit();
+                            // Dispatch the job to process the cancellation asynchronously
+                            \App\Jobs\ProcessLeaveApproval::dispatch(
+                                $record->id,
+                                auth()->id(),
+                                $data['reason'],
+                                'cancel'
+                            );
 
                             Notification::make()
-                                ->title('Cancelled')
-                                ->body('Leave request has been cancelled.')
+                                ->title('Processing')
+                                ->body('Leave request is being processed for cancellation. You will be notified when complete.')
                                 ->success()
                                 ->send();
                         } catch (\Exception $e) {
-                            DB::rollBack();
                             Notification::make()
                                 ->title('Error')
-                                ->body('Failed to cancel leave request. Please try again.')
+                                ->body('Failed to queue cancellation. ' . $e->getMessage())
                                 ->danger()
                                 ->send();
                         }
@@ -569,7 +626,7 @@ class LeaveRequestResource extends Resource
             'index' => Pages\ListLeaveRequests::route('/'),
             'create' => Pages\CreateLeaveRequest::route('/create'),
             'edit' => Pages\EditLeaveRequest::route('/{record}/edit'),
-//            'view' => Pages\ViewLeaveRequest::route('/{record}'),
+            'view' => Pages\ViewLeaveRequest::route('/{record}'),
         ];
     }
 

@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\LeaveRequest;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\Widget;
 
 class OrganizationalHealthWidget extends Widget
@@ -14,6 +15,7 @@ class OrganizationalHealthWidget extends Widget
     // Set a default polling interval (optional)
     protected static ?string $pollingInterval = '30s';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
     public function calculateOrganizationalHealth()
     {

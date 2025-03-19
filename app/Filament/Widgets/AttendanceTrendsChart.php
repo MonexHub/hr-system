@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Attendance;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Leandrocfe\FilamentApexCharts\Widgets\ApexChartWidget;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -15,6 +16,7 @@ class AttendanceTrendsChart extends ApexChartWidget
      * @var string
      */
     protected static ?string $chartId = 'attendanceTrendsChart';
+    use HasWidgetShield;
 
     /**
      * Widget Title

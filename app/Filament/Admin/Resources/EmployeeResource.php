@@ -16,11 +16,13 @@ use App\Models\Employee;
 use App\Models\EmployeeImport;
 use App\Services\BeemService;
 use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\ImportAction;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,6 +40,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     protected static ?string $navigationIcon = 'heroicon-o-users';
     protected static ?string $navigationGroup = 'Employee Management';
     protected static ?int $navigationSort = 1;
+
+
 
     public static function form(Form $form): Form
     {
@@ -60,7 +64,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->directory('employee-photos')
                                         ])
                                         ->columnSpan(3),
-
                                     Forms\Components\Section::make()
                                         ->schema([
                                             Forms\Components\TextInput::make('employee_code')
@@ -68,18 +71,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->disabled()
                                                 ->dehydrated()
                                                 ->required(),
-
                                             Forms\Components\TextInput::make('first_name')
                                                 ->required()
                                                 ->maxLength(255),
-
                                             Forms\Components\TextInput::make('middle_name')
                                                 ->maxLength(255),
-
                                             Forms\Components\TextInput::make('last_name')
                                                 ->required()
                                                 ->maxLength(255),
-
                                             Forms\Components\Select::make('gender')
                                                 ->options([
                                                     'male' => 'Male',
@@ -89,16 +88,13 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->searchable()
                                                 ->preload(true)
                                                 ->required(),
-
                                             Forms\Components\TextInput::make('branch')
                                                 ->dehydrated()
                                                 ->required(),
-
                                             Forms\Components\DatePicker::make('birthdate')
                                                 ->required()
                                                 ->maxDate(now()->subYears(18))
                                                 ->displayFormat('d/m/Y'),
-
                                             Forms\Components\Select::make('marital_status')
                                                 ->options([
                                                     'single' => 'Single',
@@ -113,7 +109,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ->columnSpan(9)
                                 ])
                         ])->columnSpanFull(12),
-
                     // Step 2: Employment Details
                     Forms\Components\Wizard\Step::make('Employment Details')
                         ->icon('heroicon-o-briefcase')
@@ -171,7 +166,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 }
                                             }
                                         }),
-
                                     Forms\Components\TextInput::make('net_salary')
                                         ->label('Net Salary')
                                         ->numeric()
@@ -469,6 +463,12 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 ,
             ])
             ->actions([
+                Action::make('viewResume')
+                    ->label('View Resume')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->url(fn ($record) => route('employee.resume', $record))
+                    ->openUrlInNewTab(),
                 Tables\Actions\Action::make('create_user_account')
                     ->label('Create User Account')
                     ->icon('heroicon-o-user-plus')
@@ -676,13 +676,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                 ]);
                             }
                         }
-
                         // Determine notification type based on results
                         if ($emailSent || $smsSent) {
                             $channels = [];
                             if ($emailSent) $channels[] = 'email';
                             if ($smsSent) $channels[] = 'SMS';
-
                             $notification = Notification::make()
                                 ->success()
                                 ->title('Setup Link Sent')
@@ -730,15 +728,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     public static function getRelations(): array
     {
         return [
-       DependentsRelationManager::class,
-           EmergencyContactsRelationManager::class,
+            DependentsRelationManager::class,
+            EmergencyContactsRelationManager::class,
             SkillsRelationManager::class,
-           DocumentsRelationManager::class,
-           EducationRelationManager::class,
-           FinancialsRelationManager::class,
+            DocumentsRelationManager::class,
+            EducationRelationManager::class,
+            FinancialsRelationManager::class,
         ];
     }
-
     public static function getPages(): array
     {
         return [
@@ -778,7 +775,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
             $query->where('id', auth()->user()->employee?->id);
         } // For users with no specific role
         else {
-            $query->where('id', null); // No access
+            $query->where('id', null);
         }
 
         return $query->whereNull('deleted_at');
@@ -788,27 +785,22 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     {
         return static::getModel()::where('employment_status', 'active')->count();
     }
-
     public static function getNavigationBadgeColor(): ?string
     {
         return 'success';
     }
-
     public static function shouldRegisterNavigation(): bool
     {
         return auth()->user()->can('view_any_employee');
     }
-
     public static function canViewAny(): bool
     {
         return auth()->user()->can('view_any_employee');
     }
-
     public static function canCreate(): bool
     {
         return auth()->user()->can('create_employee');
     }
-
     public static function afterCreate(Model $record): void
     {
         // Generate a random token for account setup
@@ -820,11 +812,10 @@ class EmployeeResource extends Resource implements HasShieldPermissions
         // Send email to employee
         Mail::to($record->email)->send(new NewEmployeeAccountSetupMail($record, $token));
     }
-
     public static function getImports(): array
     {
         return [
-            EmployeeImporter::class, // Ensure this is included!
+            EmployeeImporter::class,
         ];
     }
 

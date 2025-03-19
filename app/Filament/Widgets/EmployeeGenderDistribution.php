@@ -2,7 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Models\Department;
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\DB;
 
@@ -14,6 +16,7 @@ class EmployeeGenderDistribution extends ChartWidget
 
     // Add refreshing interval
     protected static ?string $pollingInterval = '15s';
+    use HasWidgetShield;
 
     protected function getData(): array
     {

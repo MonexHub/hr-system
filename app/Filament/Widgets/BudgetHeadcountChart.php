@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Leandrocfe\FilamentApexCharts\Widgets\ApexChartWidget;
 use Illuminate\Support\Facades\Log;
 
@@ -15,6 +16,7 @@ class BudgetHeadcountChart extends ApexChartWidget
      */
     protected static ?string $chartId = 'budgetHeadcountChart';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
     /**
      * Widget Title

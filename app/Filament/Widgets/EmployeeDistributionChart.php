@@ -4,12 +4,14 @@ namespace App\Filament\Widgets;
 
 use App\Models\Employee;
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\DB;
 
 class EmployeeDistributionChart extends ChartWidget
 {
     protected static ?string $heading = 'Employee Distribution';
+    use HasWidgetShield;
 
     protected static ?int $sort = 2;
 

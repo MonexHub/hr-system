@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\Department;
 use App\Models\Employee;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\Widget;
 
 class DepartmentBudgetWidget extends Widget
@@ -13,6 +14,7 @@ class DepartmentBudgetWidget extends Widget
     // Set a default polling interval (optional)
     protected static ?string $pollingInterval = '30s';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
     public function calculateBudgetStats()
     {

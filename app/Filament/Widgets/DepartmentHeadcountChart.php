@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Department;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Leandrocfe\FilamentApexCharts\Widgets\ApexChartWidget;
 
 class DepartmentHeadcountChart extends ApexChartWidget
@@ -14,6 +15,7 @@ class DepartmentHeadcountChart extends ApexChartWidget
      */
     protected static ?string $chartId = 'departmentHeadcountChart';
     protected int | string | array $columnSpan = 'full';
+    use HasWidgetShield;
 
 
     /**
