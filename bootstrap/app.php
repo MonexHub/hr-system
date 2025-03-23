@@ -30,7 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
         apiPrefix: '/api', // This sets the prefix for API routes
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->api(prepend: [
+            ForceJsonResponse::class,
+        ]);
     })
     ->withSchedule(function (Schedule $schedule) {
         // 1. Contract and Probation Status Checks (9 AM EAT)
