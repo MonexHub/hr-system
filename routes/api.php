@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PerfomanceAppraisalController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\NotificationPreferenceController;
+
 
 
 
@@ -121,6 +123,9 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/jobtitles',[OrganizationController::class,'jobTitles']);
 
 
+
+    //Notification Preferences
+    Route::resource('notification-preferences', NotificationPreferenceController::class);
 
 
 });
