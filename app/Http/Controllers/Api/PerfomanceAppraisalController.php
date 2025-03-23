@@ -4,8 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\PerfomanceAppraisal;
+use App\Models\PerformanceAppraisal;
 use Illuminate\Support\Facades\Auth;
+use App\Models\Employee;
 
 
 

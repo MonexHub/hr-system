@@ -38,7 +38,7 @@ class AuthController extends Controller
         'documents',
         'emergencyContacts',
         'dependents',
-        'financials',
+        'financials'
     ])->first();
 
     // Revoke all existing tokens for the user
@@ -53,22 +53,14 @@ DB::table('oauth_access_tokens')
     // Load the 'employee' relationship and retrieve role names
     $user->load('employee');
     $roles = $user->getRoleNames(); // Returns a collection of role names
+    $permissions = $user->getAllPermissions()->pluck('name'); // Returns a collection of permission names
 
-    // Construct a custom user data array
-    $userData = [
-        'id' => $user->id,
-        'name' => $user->name,
-        'email' => $user->email,
-        'avatar' => $user->avatar_url,
-        // Include other attributes as needed
-        'employee' => $employee, // Include employee relationship
-        'roles' => $roles, // Include roles
-        // Exclude the 'tokens' relationship
-    ];
+    $employee['roles'] = $roles;
+    $employee['permissions'] = $permissions;
 
     // Return the custom user data along with the access token
     return response([
-        'user' => $userData,
+        'user' => $employee,
         'access_token' => $accessToken,
     ]);
     }

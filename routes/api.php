@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\EmployeeController;
@@ -74,15 +73,15 @@ Route::middleware(['auth:api'])->group(function () {
 
     //Perfomance Appraisal Routes
     Route::prefix('appraisals')->group(function () {
-        Route::get('', [PerformanceAppraisalController::class, 'index']);
-        Route::post('', [PerformanceAppraisalController::class, 'store']);
-        Route::get('/{id}', [PerformanceAppraisalController::class, 'show']);
-        Route::put('/{id}', [PerformanceAppraisalController::class, 'update']);
-        Route::delete('/{id}', [PerformanceAppraisalController::class, 'destroy']);
-        Route::post('/{id}/restore', [PerformanceAppraisalController::class, 'restore']);
-        Route::post('/{id}/submit', [PerformanceAppraisalController::class, 'submit']);
-        Route::post('/{id}/supervisor-approve', [PerformanceAppraisalController::class, 'supervisorApprove']);
-        Route::post('/{id}/hr-approve', [PerformanceAppraisalController::class, 'hrApprove']);
+        Route::get('', [PerfomanceAppraisalController::class, 'index']);
+        Route::post('', [PerfomanceAppraisalController::class, 'store']);
+        Route::get('/{id}', [PerfomanceAppraisalController::class, 'show']);
+        Route::put('/{id}', [PerfomanceAppraisalController::class, 'update']);
+        Route::delete('/{id}', [PerfomanceAppraisalController::class, 'destroy']);
+        Route::post('/{id}/restore', [PerfomanceAppraisalController::class, 'restore']);
+        Route::post('/{id}/submit', [PerfomanceAppraisalController::class, 'submit']);
+        Route::post('/{id}/supervisor-approve', [PerfomanceAppraisalController::class, 'supervisorApprove']);
+        Route::post('/{id}/hr-approve', [PerfomanceAppraisalController::class, 'hrApprove']);
     });
 
 
