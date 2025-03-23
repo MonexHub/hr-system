@@ -9,6 +9,7 @@ use Filament\Infolists;
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\FontWeight;
+use Illuminate\Support\Facades\Auth;
 
 class ViewJobApplication extends ViewRecord
 {
@@ -17,9 +18,13 @@ class ViewJobApplication extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            // Edit action - Not available for employees
             Actions\EditAction::make()
-                ->visible(fn () => $this->record->status === 'new'),
+                ->visible(fn () =>
+                    $this->record->status === 'new' &&
+                    !Auth::user()->hasRole('employee')),
 
+            // Shortlist action - Only for HR managers and above
             Actions\Action::make('shortlist')
                 ->icon('heroicon-o-star')
                 ->color('warning')
@@ -31,8 +36,13 @@ class ViewJobApplication extends ViewRecord
                     ]));
                 })
                 ->requiresConfirmation()
-                ->visible(fn () => in_array($this->record->status, ['new', 'reviewed'])),
+                ->visible(fn () =>
+                    in_array($this->record->status, ['new', 'reviewed']) &&
+                    (Auth::user()->hasRole('hr_manager') ||
+                        Auth::user()->hasRole('chief_executive_officer') ||
+                        Auth::user()->hasRole('super_admin'))),
 
+            // Schedule Interview - Available to department heads and above
             Actions\Action::make('schedule_interview')
                 ->icon('heroicon-o-calendar')
                 ->color('info')
@@ -46,8 +56,14 @@ class ViewJobApplication extends ViewRecord
                         'interview_mode' => 'video'
                     ]));
                 })
-                ->visible(fn () => $this->record->status === 'shortlisted'),
+                ->visible(fn () =>
+                    $this->record->status === 'shortlisted' &&
+                    (Auth::user()->hasRole('department_head') ||
+                        Auth::user()->hasRole('hr_manager') ||
+                        Auth::user()->hasRole('chief_executive_officer') ||
+                        Auth::user()->hasRole('super_admin'))),
 
+            // Hire action - Only for HR managers and above
             Actions\Action::make('hire')
                 ->icon('heroicon-o-user-plus')
                 ->color('success')
@@ -61,8 +77,13 @@ class ViewJobApplication extends ViewRecord
                     ]));
                 })
                 ->requiresConfirmation()
-                ->visible(fn () => $this->record->status === 'interview_completed'),
+                ->visible(fn () =>
+                    $this->record->status === 'interview_completed' &&
+                    (Auth::user()->hasRole('hr_manager') ||
+                        Auth::user()->hasRole('chief_executive_officer') ||
+                        Auth::user()->hasRole('super_admin'))),
 
+            // Reject action - Only for HR managers and above
             Actions\Action::make('reject')
                 ->icon('heroicon-o-x-circle')
                 ->color('danger')
@@ -73,8 +94,13 @@ class ViewJobApplication extends ViewRecord
                     ]));
                 })
                 ->requiresConfirmation()
-                ->visible(fn () => !in_array($this->record->status, ['rejected', 'hired'])),
+                ->visible(fn () =>
+                    !in_array($this->record->status, ['rejected', 'hired']) &&
+                    (Auth::user()->hasRole('hr_manager') ||
+                        Auth::user()->hasRole('chief_executive_officer') ||
+                        Auth::user()->hasRole('super_admin'))),
 
+            // Download Resume - Available to all roles
             Actions\Action::make('download_resume')
                 ->icon('heroicon-o-document-arrow-down')
                 ->url(fn () => storage_path('app/public/' . $this->record->resume_path))
@@ -208,7 +234,7 @@ class ViewJobApplication extends ViewRecord
                             ->columnSpanFull(),
                     ]),
 
-                // Review Information
+                // Review Information - Hidden for employees
                 Infolists\Components\Section::make('Review Information')
                     ->schema([
                         Infolists\Components\TextEntry::make('reviewer.name')
@@ -221,7 +247,12 @@ class ViewJobApplication extends ViewRecord
                             ->visible(fn ($record) => $record->reviewed_at),
                     ])
                     ->columns(2)
-                    ->visible(fn ($record) => $record->reviewed_by || $record->reviewed_at),
+                    ->visible(fn () =>
+                        (Auth::user()->hasRole('department_head') ||
+                            Auth::user()->hasRole('hr_manager') ||
+                            Auth::user()->hasRole('chief_executive_officer') ||
+                            Auth::user()->hasRole('super_admin')) &&
+                        ($this->record->reviewed_by || $this->record->reviewed_at)),
             ]);
     }
 }

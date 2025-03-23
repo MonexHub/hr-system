@@ -1,7 +1,29 @@
 <?php
 
-
 namespace App\Providers\Filament;
+use App\Filament\Admin\Widgets\HolidayCalendarWidget;
+use App\Filament\Widgets\AttendanceTrendsChart;
+use App\Filament\Widgets\BudgetHeadcountChart;
+use App\Filament\Widgets\ContractDistributionChart;
+use App\Filament\Widgets\ContractExpiryWidget;
+use App\Filament\Widgets\CustEmployeeOverview;
+use App\Filament\Widgets\DepartmentBudgetWidget;
+use App\Filament\Widgets\DepartmentHeadcountChart;
+use App\Filament\Widgets\EmployeeAnnouncementsWidget;
+use App\Filament\Widgets\EmployeeAttendanceSummaryWidget;
+use App\Filament\Widgets\EmployeeDocumentsWidget;
+use App\Filament\Widgets\EmployeeGenderDistribution;
+use App\Filament\Widgets\EmployeeLeaveBalanceWidget;
+use App\Filament\Widgets\EmployeeLeaveRequestsWidget;
+use App\Filament\Widgets\EmployeeOverviewWidget;
+use App\Filament\Widgets\EmployeeProfileSummaryWidget;
+use App\Filament\Widgets\EmploymentDistributionWidget;
+use App\Filament\Widgets\LeaveDistributionChart;
+use App\Filament\Widgets\LeaveManagementWidget;
+use App\Filament\Widgets\OrganizationalHealthWidget;
+use App\Filament\Widgets\RecentNotificationsWidget;
+use App\Helpers\SettingsHelper;
+use App\Models\Employee;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use DiogoGPinto\AuthUIEnhancer\AuthUIEnhancerPlugin;
 use Filament\Http\Middleware\Authenticate;
@@ -22,6 +44,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Joaopaulolndev\FilamentEditProfile\FilamentEditProfilePlugin;
 use Joaopaulolndev\FilamentEditProfile\Pages\EditProfilePage;
+use Leandrocfe\FilamentApexCharts\FilamentApexChartsPlugin;
 use Nuxtifyts\DashStackTheme\DashStackThemePlugin;
 use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
 use Swis\Filament\Backgrounds\ImageProviders\MyImages;
@@ -30,6 +53,12 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        // Get settings from database
+        $appName = SettingsHelper::getAppName();
+        $primaryColor = SettingsHelper::getPrimaryColor();
+        $logoLight = SettingsHelper::getLogo('light');
+        $logoDark = SettingsHelper::getLogo('dark');
+
         return $panel
             ->default()
             ->id('admin')
@@ -37,15 +66,23 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->passwordReset()
             ->emailVerification()
+            ->userMenuItems([
+                'profile' => MenuItem::make()
+                    ->label(fn() => auth()->user()->name)
+                    ->url(fn (): string => EditProfilePage::getUrl())
+                    ->icon('heroicon-m-user-circle')
+
+            ])
             ->colors([
-                'primary' => Color::Green,
+                'primary' => Color::Amber,
                 'secondary' => Color::Gray,
                 'success' => Color::Green,
                 'warning' => Color::Amber,
                 'danger' => Color::Red,
             ])
-            ->brandName('HR Management System')
-            ->brandLogo(asset('images/monexLogo.png'))
+            ->brandName($appName ?? 'HR Management System')
+            ->brandLogo(fn () => $logoLight ?? asset('images/monexLogo.png'))
+            ->darkModeBrandLogo(fn () => $logoDark ?? asset('images/monexLogo.png'))
             ->favicon(asset('images/favicon.ico'))
             ->font('Inter')
             ->darkMode(true)
@@ -62,12 +99,37 @@ class AdminPanelProvider extends PanelProvider
             ])
 
             // Widget Discovery
-            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
+//            ->discoverWidgets(in: app_path('Filament/Admin/Widgets'), for: 'App\\Filament\\Admin\\Widgets')
             ->widgets([
-                Widgets\AccountWidget::class,
-                Widgets\FilamentInfoWidget::class,
+                // Priority 1: Employee Overview and Key Metrics
+                EmployeeProfileSummaryWidget::class,
+                EmployeeAttendanceSummaryWidget::class,
+                OrganizationalHealthWidget::class,
+                EmploymentDistributionWidget::class,
+
+                // Priority 2: Performance and Attendance Management
+                LeaveManagementWidget::class,
+                AttendanceTrendsChart::class,
+                EmployeeLeaveRequestsWidget::class,
+                EmployeeLeaveBalanceWidget::class,
+                LeaveDistributionChart::class,
+
+                // Priority 3: Workforce Planning and Budget
+                DepartmentHeadcountChart::class,
+                BudgetHeadcountChart::class,
+                DepartmentBudgetWidget::class,
+                ContractDistributionChart::class,
+                ContractExpiryWidget::class,
+
+                // Priority 4: Communication and Announcements
+                EmployeeAnnouncementsWidget::class,
+                RecentNotificationsWidget::class,
+                EmployeeDocumentsWidget::class,
+                HolidayCalendarWidget::class,
             ])
             ->plugins([
+//                FilamentApexChartsPlugin::make(),
+                FilamentApexChartsPlugin::make(),
                 FilamentShieldPlugin::make()
                     ->gridColumns([
                         'default' => 1,
@@ -102,11 +164,9 @@ class AdminPanelProvider extends PanelProvider
                     ->shouldShowSanctumTokens()
                     ->shouldShowBrowserSessionsForm()
                     ->shouldShowAvatarForm()
-                    ->customProfileComponents([
-                        \App\Livewire\CustomProfileComponent::class,
-                    ]),
-                DashStackThemePlugin::make()
-           ])
+
+//                DashStackThemePlugin::make()
+            ])
             // Middleware
             ->middleware([
                 EncryptCookies::class,
