@@ -18,6 +18,37 @@ class LeaveRequest extends Model
 {
     use SoftDeletes, Notifiable;
 
+    protected $guarded = [];
+
+    /**
+     * The attributes that should not be persisted to the database.
+     *
+     * @var array
+     */
+    protected $transient = ['skipNotifications'];
+
+    /**
+     * Override the save method to remove transient attributes before saving
+     *
+     * @param array $options
+     * @return bool
+     */
+    public function save(array $options = [])
+    {
+        $attributes = $this->getAttributes();
+
+        // Remove any transient attributes
+        foreach ($this->transient as $attribute) {
+            if (array_key_exists($attribute, $attributes)) {
+                unset($attributes[$attribute]);
+            }
+        }
+
+        $this->setRawAttributes($attributes);
+
+        return parent::save($options);
+    }
+
     protected $fillable = [
         'request_number',
         'employee_id',

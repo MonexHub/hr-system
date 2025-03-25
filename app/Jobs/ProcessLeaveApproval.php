@@ -65,8 +65,9 @@ class ProcessLeaveApproval implements ShouldQueue
 
             $leaveRequest = LeaveRequest::findOrFail($this->leaveRequestId);
 
-            // Add a property to prevent duplicate notifications from model events
-            $leaveRequest->skipNotifications = true;
+            // Temporarily disable event listeners to prevent automatic notifications
+            $originalDispatcher = $leaveRequest->getEventDispatcher();
+            $leaveRequest->unsetEventDispatcher();
 
             $approver = User::findOrFail($this->approverId);
 
@@ -96,6 +97,9 @@ class ProcessLeaveApproval implements ShouldQueue
                 default:
                     throw new \Exception('Invalid approval type');
             }
+
+            // Restore the event dispatcher after saving
+            $leaveRequest->setEventDispatcher($originalDispatcher);
 
             DB::commit();
 
@@ -141,7 +145,7 @@ class ProcessLeaveApproval implements ShouldQueue
         $leaveRequest->status = LeaveRequest::STATUS_DEPARTMENT_APPROVED;
         $leaveRequest->save();
 
-        // Manually send notification - the model's event won't trigger it
+        // Manually send notification - we're bypassing the model's event
         $leaveRequest->notifyDepartmentApproval();
     }
 
@@ -163,7 +167,7 @@ class ProcessLeaveApproval implements ShouldQueue
             $leaveRequest->status = LeaveRequest::STATUS_HR_APPROVED; // Move to CEO approval
             $leaveRequest->save();
 
-            // Manually send notification - the model's event won't trigger it
+            // Manually send notification - we're bypassing the model's event
             $leaveRequest->notifyHRApproval();
         } else {
             // For regular employees, this is final approval
@@ -173,7 +177,7 @@ class ProcessLeaveApproval implements ShouldQueue
             // Update leave balance
             $leaveRequest->updateLeaveBalance();
 
-            // Manually send notification - the model's event won't trigger it
+            // Manually send notification - we're bypassing the model's event
             $leaveRequest->notifyFinalApproval();
         }
     }
@@ -200,7 +204,7 @@ class ProcessLeaveApproval implements ShouldQueue
         // Update leave balance
         $leaveRequest->updateLeaveBalance();
 
-        // Manually send notification - the model's event won't trigger it
+        // Manually send notification - we're bypassing the model's event
         $leaveRequest->notifyFinalApproval();
     }
 
@@ -216,7 +220,7 @@ class ProcessLeaveApproval implements ShouldQueue
         // Release pending days from leave balance
         $leaveRequest->releaseLeaveBalance();
 
-        // Manually send notification - the model's event won't trigger it
+        // Manually send notification - we're bypassing the model's event
         if (method_exists($leaveRequest, 'notifyRejection')) {
             $leaveRequest->notifyRejection();
         }
@@ -240,7 +244,7 @@ class ProcessLeaveApproval implements ShouldQueue
         // Release pending days from leave balance
         $leaveRequest->releaseLeaveBalance();
 
-        // Manually send notification - the model's event won't trigger it
+        // Manually send notification - we're bypassing the model's event
         if (method_exists($leaveRequest, 'notifyCancellation')) {
             $leaveRequest->notifyCancellation();
         }
