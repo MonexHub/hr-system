@@ -9,11 +9,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Traits\HasRoles;
+use Laravel\Passport\HasApiTokens;
+
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable,HasRoles;
+    use HasApiTokens, HasFactory, Notifiable,HasRoles;
 
     public function getFilamentAvatarUrl(): ?string
     {
@@ -33,6 +35,7 @@ class User extends Authenticatable
         'avatar_url',
         'is_active',
         'last_login_at',
+        'fcm_token'
     ];
 
     /**
