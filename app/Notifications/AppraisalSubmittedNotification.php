@@ -78,7 +78,6 @@ class AppraisalSubmittedNotification extends Notification implements ShouldQueue
             ->line("Final Rating: {$this->appraisal->overall_rating}")
             ->action('View Appraisal', url("/admin/performance-appraisals/{$this->appraisal->id}"));
     }
-
     public function toDatabase($notifiable): array
     {
         return [

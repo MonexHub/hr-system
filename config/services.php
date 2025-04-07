@@ -27,6 +27,9 @@ return [
     'resend' => [
         'key' => env('RESEND_KEY'),
     ],
+    'firebase' => [
+        'database_url' => env('FIREBASE_DATABASE_URL'),
+    ],
 
     'beem' => [
         'api_key' => env('BEEM_API_KEY'),

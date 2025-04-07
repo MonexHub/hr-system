@@ -1,16 +1,26 @@
 <?php
 namespace App\Filament\Admin\Resources\EmployeeResource\Pages;
 
+use App\Filament\Actions\ExportEmployeeProfileAction;
 use App\Filament\Admin\Resources\EmployeeResource;
+use App\Mail\NewEmployeeAccountSetupMail;
+use App\Models\Employee;
+use App\Services\BeemService;
+use Dompdf\Image\Cache;
 use Filament\Actions;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Infolists;
+use Filament\Notifications\Notification;
 use Filament\Infolists\Components\{Grid, Section, Split, TextEntry};
 use Filament\Infolists\Infolist;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\FontWeight;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ViewEmployee extends ViewRecord
 {
@@ -81,8 +91,262 @@ class ViewEmployee extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('viewResume')
+                ->label('View Resume')
+                ->icon('heroicon-o-document-text')
+                ->color('success')
+                ->url(fn ($record) => route('employee.resume', $record))
+                ->openUrlInNewTab(),
+
             Actions\EditAction::make()
                 ->color('gray'),
+
+            Actions\Action::make('create_user_account')
+                ->label('Create User Account')
+                ->icon('heroicon-o-user-plus')
+                ->color('success')
+                ->requiresConfirmation()
+                ->modalHeading('Create User Account')
+                ->modalDescription('Create a new user account for this employee and send setup instructions via email and SMS if available.')
+                ->modalSubmitActionLabel('Create Account')
+                ->visible(function (Employee $record) {
+                    return auth()->user()->hasRole(['super_admin', 'hr_manager']) && !$record->user;
+                })
+                ->action(function (Employee $record) {
+                    try {
+                        // Create new user account
+                        $user = \App\Models\User::create([
+                            'name' => $record->full_name,
+                            'email' => $record->email,
+                            'password' => Hash::make(Str::random(16))
+                        ]);
+
+                        // Assign 'employee' role to the user
+                        $user->assignRole('employee');
+
+                        // Associate user with employee
+                        $record->user_id = $user->id;
+                        $record->save();
+
+                        // Generate token for account setup
+                        $token = Str::random(64);
+
+                        // Store token in cache
+                        Cache::put(
+                            'account_setup_' . $record->id,
+                            $token,
+                            now()->addHours(48)
+                        );
+
+                        $setupUrl = route('employee.setup-account', [
+                            'token' => $token,
+                            'email' => $record->email,
+                        ]);
+
+                        $emailSent = false;
+                        $smsSent = false;
+                        $errors = [];
+
+                        // Try to send email
+                        try {
+                            Mail::to($record->email)->send(
+                                new NewEmployeeAccountSetupMail($record, $token)
+                            );
+                            $emailSent = true;
+                        } catch (\Exception $e) {
+                            $errors['email'] = $e->getMessage();
+                            Log::error('Failed to send setup email', [
+                                'employee_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+
+                        // Try to send SMS if phone number exists
+                        if ($record->phone_number) {
+                            try {
+                                $beemService = new BeemService();
+                                $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
+
+                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                                if ($result['success']) {
+                                    $smsSent = true;
+                                } else {
+                                    $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                    Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                        'error' => $result['error'] ?? 'Unknown error'
+                                    ]);
+                                }
+                            } catch (\Exception $e) {
+                                $errors['sms'] = $e->getMessage();
+                                Log::error('Failed to send setup SMS', [
+                                    'employee_id' => $record->id,
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+
+                        // Determine notification type based on results
+                        if ($emailSent || $smsSent) {
+                            $channels = [];
+                            if ($emailSent) $channels[] = 'email';
+                            if ($smsSent) $channels[] = 'SMS';
+
+                            $notification = Notification::make()
+                                ->success()
+                                ->title('Account Created')
+                                ->body('User account created with "employee" role and setup instructions sent via ' . implode(' and ', $channels) . '.');
+
+                            if (!empty($errors)) {
+                                $failedChannels = array_keys($errors);
+                                $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                            }
+
+                            $notification->send();
+                            $this->refreshFormData();
+                            return true;
+                        } else {
+                            Notification::make()
+                                ->warning()
+                                ->title('Account Created With Warning')
+                                ->body('User account was created with "employee" role but failed to send setup instructions through any channel. Please try resending the setup link.')
+                                ->send();
+
+                            Log::error('Account created but failed to send setup instructions through any channel', [
+                                'employee_id' => $record->id,
+                                'errors' => $errors
+                            ]);
+                            $this->refreshFormData();
+                            return true;
+                        }
+
+                    } catch (\Exception $e) {
+                        Log::error('Failed to create user account', [
+                            'employee_id' => $record->id,
+                            'error' => $e->getMessage()
+                        ]);
+
+                        Notification::make()
+                            ->danger()
+                            ->title('Error')
+                            ->body('Failed to create user account: ' . $e->getMessage())
+                            ->send();
+
+                        throw $e;
+                    }
+                }),
+
+            Actions\Action::make('resend_setup')
+                ->label('Resend Setup Link')
+                ->icon('heroicon-o-envelope')
+                ->color('warning')
+                ->requiresConfirmation()
+                ->modalHeading('Resend Account Setup Link')
+                ->modalDescription('This will generate a new setup link and send it to the employee via email and SMS if available.')
+                ->modalSubmitActionLabel('Resend Link')
+                ->visible(function (Employee $record) {
+                    return auth()->user()->hasRole(['super_admin', 'hr_manager']) && $record->user !== null;
+                })
+                ->action(function (Employee $record) {
+                    // Generate new token
+                    $token = Str::random(64);
+
+                    // Store token in cache
+                    Cache::put(
+                        'account_setup_' . $record->id,
+                        $token,
+                        now()->addHours(48)
+                    );
+
+                    $setupUrl = route('employee.setup-account', [
+                        'token' => $token,
+                        'email' => $record->email,
+                    ]);
+
+                    $emailSent = false;
+                    $smsSent = false;
+                    $errors = [];
+
+                    // Try to send email
+                    try {
+                        Mail::to($record->email)->send(
+                            new NewEmployeeAccountSetupMail($record, $token)
+                        );
+                        $emailSent = true;
+                    } catch (\Exception $e) {
+                        $errors['email'] = $e->getMessage();
+                        Log::error('Failed to send setup email', [
+                            'employee_id' => $record->id,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+
+                    // Try to send SMS if phone number exists
+                    if ($record->phone_number) {
+                        try {
+                            $beemService = new BeemService();
+                            $smsMessage = "Your " . config('app.name') . " account setup link has been reset. Set up your account at: " . $setupUrl;
+
+                            $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                            if ($result['success']) {
+                                $smsSent = true;
+                            } else {
+                                $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                    'error' => $result['error'] ?? 'Unknown error'
+                                ]);
+                            }
+                        } catch (\Exception $e) {
+                            $errors['sms'] = $e->getMessage();
+                            Log::error('Failed to send setup SMS', [
+                                'employee_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
+                        }
+                    }
+
+                    // Determine notification type based on results
+                    if ($emailSent || $smsSent) {
+                        $channels = [];
+                        if ($emailSent) $channels[] = 'email';
+                        if ($smsSent) $channels[] = 'SMS';
+
+                        $notification = Notification::make()
+                            ->success()
+                            ->title('Setup Link Sent')
+                            ->body('Setup link sent via ' . implode(' and ', $channels) . '.');
+
+                        if (!empty($errors)) {
+                            $failedChannels = array_keys($errors);
+                            $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                        }
+
+                        $notification->send();
+                        $this->refreshFormData();
+                    } else {
+                        Notification::make()
+                            ->danger()
+                            ->title('Setup Link Failed')
+                            ->body('Failed to send setup link through any channel. Please try again.')
+                            ->send();
+
+                        Log::error('Failed to send setup link through any channel', [
+                            'employee_id' => $record->id,
+                            'errors' => $errors
+                        ]);
+                    }
+                }),
+
+            Actions\Action::make('exportProfile')
+                ->label('Export Profile')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('primary')
+                ->visible(fn() => auth()->user()->can('export_employee'))
+                ->action(function (Employee $record) {
+                    return app(ExportEmployeeProfileAction::class)->execute($record);
+                }),
+
             $this->getTerminateAction(),
         ];
     }

@@ -11,17 +11,18 @@ use App\Filament\Admin\Resources\ProfileResource\RelationManagers\EmergencyConta
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\FinancialsRelationManager;
 use App\Filament\Admin\Resources\ProfileResource\RelationManagers\SkillsRelationManager;
 use App\Filament\Imports\EmployeeImporter;
-use App\Filament\Imports\EmployeeImportImporter;
 use App\Mail\NewEmployeeAccountSetupMail;
 use App\Models\Employee;
 use App\Models\EmployeeImport;
 use App\Services\BeemService;
 use BezhanSalleh\FilamentShield\Contracts\HasShieldPermissions;
+use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
+use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\ImportAction;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -40,6 +41,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     protected static ?string $navigationGroup = 'Employee Management';
     protected static ?int $navigationSort = 1;
 
+
+    
     public static function form(Form $form): Form
     {
         return $form
@@ -61,7 +64,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->directory('employee-photos')
                                         ])
                                         ->columnSpan(3),
-
                                     Forms\Components\Section::make()
                                         ->schema([
                                             Forms\Components\TextInput::make('employee_code')
@@ -69,18 +71,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->disabled()
                                                 ->dehydrated()
                                                 ->required(),
-
                                             Forms\Components\TextInput::make('first_name')
                                                 ->required()
                                                 ->maxLength(255),
-
                                             Forms\Components\TextInput::make('middle_name')
                                                 ->maxLength(255),
-
                                             Forms\Components\TextInput::make('last_name')
                                                 ->required()
                                                 ->maxLength(255),
-
                                             Forms\Components\Select::make('gender')
                                                 ->options([
                                                     'male' => 'Male',
@@ -90,12 +88,13 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                 ->searchable()
                                                 ->preload(true)
                                                 ->required(),
-
+                                            Forms\Components\TextInput::make('branch')
+                                                ->dehydrated()
+                                                ->required(),
                                             Forms\Components\DatePicker::make('birthdate')
                                                 ->required()
                                                 ->maxDate(now()->subYears(18))
                                                 ->displayFormat('d/m/Y'),
-
                                             Forms\Components\Select::make('marital_status')
                                                 ->options([
                                                     'single' => 'Single',
@@ -110,7 +109,6 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ->columnSpan(9)
                                 ])
                         ])->columnSpanFull(12),
-
                     // Step 2: Employment Details
                     Forms\Components\Wizard\Step::make('Employment Details')
                         ->icon('heroicon-o-briefcase')
@@ -150,7 +148,8 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                             $departmentId = $get('department_id');
                                             if ($departmentId) {
                                                 return \App\Models\JobTitle::where('department_id', $departmentId)
-                                                    ->pluck('name', 'id');
+                                                    ->pluck('name', 'id')
+                                                    ->toArray(); // Convert to array explicitly
                                             }
                                             return [];
                                         })
@@ -158,16 +157,15 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ->searchable()
                                         ->preload(true)
                                         ->live()
-                                        ->visible(fn(callable $get) => !empty($get('department_id')))
+                                        ->visible(fn(callable $get) => filled($get('department_id')))
                                         ->afterStateUpdated(function ($state, callable $set) {
-                                            if ($state) {
+                                            if (filled($state)) { // Using filled() instead of direct check
                                                 $jobTitle = \App\Models\JobTitle::find($state);
                                                 if ($jobTitle) {
                                                     $set('net_salary', $jobTitle->net_salary_min);
                                                 }
                                             }
                                         }),
-
                                     Forms\Components\TextInput::make('net_salary')
                                         ->label('Net Salary')
                                         ->numeric()
@@ -292,6 +290,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                                     return Role::whereNotIn('name', ['super_admin'])->pluck('name', 'name');
                                                 })
                                                 ->required()
+                                                ->dehydrated(fn ($operation) => $operation === 'edit')
                                                 ->preload(true)
                                                 ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager']))
                                         ])
@@ -331,6 +330,11 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->searchable()
                     ->sortable()
                     ->visible(fn() => auth()->user()->can('view_any_department')),
+                Tables\Columns\TextColumn::make('branch')
+                    ->searchable()
+                    ->sortable()
+                    ->visible(fn() => auth()->user()->can('view_any_department')),
+
 
                 Tables\Columns\TextColumn::make('employment_status')
                     ->badge()
@@ -363,6 +367,51 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->falseColor('warning')
                     ->alignCenter()
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                Tables\Columns\TextColumn::make('contract_status')
+                    ->label('Contract Status')
+                    ->badge()
+                    ->formatStateUsing(function (Employee $record): string {
+                        if ($record->contract_type === 'permanent') {
+                            return 'Permanent';
+                        }
+
+                        if ($record->contract_type === 'probation') {
+                            $daysLeft = $record->daysUntilProbationEnds();
+                            if ($daysLeft < 0) {
+                                return 'Probation Ended';
+                            }
+                            return "Probation ({$daysLeft} days left)";
+                        }
+
+                        if ($record->contract_type === 'contract') {
+                            $daysLeft = $record->daysUntilContractExpires();
+                            return "Contract ({$daysLeft} days left)";
+                        }
+
+                        return $record->contract_type;
+                    })
+                    ->color(function (Employee $record): string {
+                        if ($record->contract_type === 'permanent') {
+                            return 'success';
+                        }
+
+                        if ($record->contract_type === 'probation') {
+                            $daysLeft = $record->daysUntilProbationEnds();
+                            if ($daysLeft < 0) return 'danger';
+                            if ($daysLeft <= 7) return 'warning';
+                            return 'info';
+                        }
+
+                        if ($record->contract_type === 'contract') {
+                            $daysLeft = $record->daysUntilContractExpires();
+                            if ($daysLeft < 0) return 'danger';
+                            if ($daysLeft <= 30) return 'warning';
+                            return 'success';
+                        }
+
+                        return 'gray';
+                    })
+
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('department')
@@ -377,6 +426,31 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                         'resigned' => 'Resigned',
                     ])
                     ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
+                Tables\Filters\SelectFilter::make('contract_status')
+                    ->options([
+                        'probation_ending' => 'Probation Ending Soon',
+                        'probation_ended' => 'Probation Ended',
+                        'contract_expiring' => 'Contract Expiring Soon',
+                        'contract_expired' => 'Contract Expired',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        if (empty($data['value'])) {
+                            return $query;
+                        }
+
+                        return match ($data['value']) {
+                            'probation_ending' => $query->probationEnding(7),
+                            'probation_ended' => $query->where('contract_type', 'probation')
+                                ->whereRaw('DATEDIFF(NOW(), appointment_date) > ?', [Employee::PROBATION_DURATION * 30]),
+                            'contract_expiring' => $query->where('contract_type', 'contract')
+                                ->contractExpiringSoon(30),
+                            'contract_expired' => $query->where('contract_type', 'contract')
+                                ->whereNotNull('contract_end_date')
+                                ->whereDate('contract_end_date', '<', now()),
+                            default => $query
+                        };
+                    })
+                    ->visible(fn() => auth()->user()->hasRole(['super_admin', 'hr_manager'])),
 
                 Tables\Filters\SelectFilter::make('contract_type')
                     ->options([
@@ -389,6 +463,144 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                 ,
             ])
             ->actions([
+                Action::make('viewResume')
+                    ->label('View Resume')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->url(fn ($record) => route('employee.resume', $record))
+                    ->openUrlInNewTab(),
+                Tables\Actions\Action::make('create_user_account')
+                    ->label('Create User Account')
+                    ->icon('heroicon-o-user-plus')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->modalHeading('Create User Account')
+                    ->modalDescription('Create a new user account for this employee and send setup instructions via email and SMS if available.')
+                    ->modalSubmitActionLabel('Create Account')
+                    ->visible(function (Employee $record) {
+                        return auth()->user()->hasRole(['super_admin', 'hr_manager']) && !$record->user;
+                    })
+                    ->action(function (Employee $record) {
+                        try {
+                            // Create new user account
+                            $user = \App\Models\User::create([
+                                'name' => $record->full_name,
+                                'email' => $record->email,
+                                'password' => Hash::make(Str::random(16)) // temporary password
+                            ]);
+
+                            // Assign 'employee' role to the user
+                            $user->assignRole('employee');
+
+                            // Associate user with employee
+                            $record->user_id = $user->id;
+                            $record->save();
+
+                            // Generate token for account setup
+                            $token = Str::random(64);
+
+                            // Store token in cache
+                            Cache::put(
+                                'account_setup_' . $record->id,
+                                $token,
+                                now()->addHours(48)
+                            );
+
+                            $setupUrl = route('employee.setup-account', [
+                                'token' => $token,
+                                'email' => $record->email,
+                            ]);
+
+                            $emailSent = false;
+                            $smsSent = false;
+                            $errors = [];
+
+                            // Try to send email
+                            try {
+                                Mail::to($record->email)->send(
+                                    new NewEmployeeAccountSetupMail($record, $token)
+                                );
+                                $emailSent = true;
+                            } catch (\Exception $e) {
+                                $errors['email'] = $e->getMessage();
+                                Log::error('Failed to send setup email', [
+                                    'employee_id' => $record->id,
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+
+                            // Try to send SMS if phone number exists
+                            if ($record->phone_number) {
+                                try {
+                                    $beemService = new BeemService();
+                                    $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
+
+                                    $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                                    if ($result['success']) {
+                                        $smsSent = true;
+                                    } else {
+                                        $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                        Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                            'error' => $result['error'] ?? 'Unknown error'
+                                        ]);
+                                    }
+                                } catch (\Exception $e) {
+                                    $errors['sms'] = $e->getMessage();
+                                    Log::error('Failed to send setup SMS', [
+                                        'employee_id' => $record->id,
+                                        'error' => $e->getMessage()
+                                    ]);
+                                }
+                            }
+
+                            // Determine notification type based on results
+                            if ($emailSent || $smsSent) {
+                                $channels = [];
+                                if ($emailSent) $channels[] = 'email';
+                                if ($smsSent) $channels[] = 'SMS';
+
+                                $notification = Notification::make()
+                                    ->success()
+                                    ->title('Account Created')
+                                    ->body('User account created with "employee" role and setup instructions sent via ' . implode(' and ', $channels) . '.');
+
+                                if (!empty($errors)) {
+                                    $failedChannels = array_keys($errors);
+                                    $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                                }
+
+                                $notification->send();
+                                return true;
+                            } else {
+                                Notification::make()
+                                    ->warning()
+                                    ->title('Account Created With Warning')
+                                    ->body('User account was created with "employee" role but failed to send setup instructions through any channel. Please try resending the setup link.')
+                                    ->send();
+
+                                Log::error('Account created but failed to send setup instructions through any channel', [
+                                    'employee_id' => $record->id,
+                                    'errors' => $errors
+                                ]);
+                                return true;
+                            }
+
+                        } catch (\Exception $e) {
+                            Log::error('Failed to create user account', [
+                                'employee_id' => $record->id,
+                                'error' => $e->getMessage()
+                            ]);
+
+                            Notification::make()
+                                ->danger()
+                                ->title('Error')
+                                ->body('Failed to create user account: ' . $e->getMessage())
+                                ->send();
+
+                            throw $e;
+                        }
+                    }),
 
                 Tables\Actions\ViewAction::make()
                     ->visible(fn(Employee $record) => auth()->user()->can('view', $record)),
@@ -401,96 +613,112 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                     ->color('warning')
                     ->requiresConfirmation()
                     ->modalHeading('Resend Account Setup Link')
-                    ->modalDescription('Are you sure you want to resend the account setup link? This will invalidate any previous setup links.')
-                    ->modalSubmitActionLabel('Yes, resend link')
-                    ->successNotification(
-                        Notification::make()
-                            ->success()
-                            ->title('Setup Instructions Sent')
-                            ->body('Account setup instructions have been sent via email and SMS.')
-                    )
-                    ->failureNotification(
-                        Notification::make()
-                            ->danger()
-                            ->title('Error')
-                            ->body('Failed to send setup instructions. Please try again.')
-                    )
-                    ->action(function ($record) {
+                    ->modalDescription('This will generate a new setup link and send it to the employee via email and SMS if available.')
+                    ->modalSubmitActionLabel('Resend Link')
+                    ->visible(function (Employee $record) {
+                        return auth()->user()->hasRole(['super_admin', 'hr_manager']) && $record->user !== null;
+                    })
+                    ->action(function (Employee $record) {
+                        // Generate new token
+                        $token = Str::random(64);
+
+                        // Store token in cache
+                        Cache::put(
+                            'account_setup_' . $record->id,
+                            $token,
+                            now()->addHours(48)
+                        );
+
+                        $setupUrl = route('employee.setup-account', [
+                            'token' => $token,
+                            'email' => $record->email,
+                        ]);
+
+                        $emailSent = false;
+                        $smsSent = false;
+                        $errors = [];
+
+                        // Try to send email
                         try {
-                            // Generate new token
-                            $token = Str::random(64);
-
-                            // Store new token in cache
-                            Cache::put(
-                                'account_setup_' . $record->id,
-                                $token,
-                                now()->addHours(48)
-                            );
-
-                            $setupUrl = route('employee.setup-account', [
-                                'token' => $token,
-                                'email' => $record->email,
-                            ]);
-
-                            // Send email
                             Mail::to($record->email)->send(
                                 new NewEmployeeAccountSetupMail($record, $token)
                             );
-
-                            // Send SMS if phone number exists
-                            if ($record->phone_number) {
-                                $beemService = new BeemService();
-
-                                $smsMessage = "Welcome to " . config('app.name') . "! Set up your account at: " . $setupUrl;
-
-                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
-
-                                if (!$result['success']) {
-                                    \Log::warning('SMS sending failed for employee: ' . $record->id, [
-                                        'error' => $result['error'] ?? 'Unknown error'
-                                    ]);
-                                }
-                            }
-
-                            return true;
+                            $emailSent = true;
                         } catch (\Exception $e) {
-                            Log::error('Failed to send setup instructions', [
+                            $errors['email'] = $e->getMessage();
+                            Log::error('Failed to send setup email', [
                                 'employee_id' => $record->id,
                                 'error' => $e->getMessage()
                             ]);
-                            throw $e;
                         }
-                    })
-                    // Updated visibility condition
-                    ->visible(function (Employee $record) {
-                        // Check if user has admin/HR role
-                        $hasPermission = auth()->user()->hasRole(['super_admin', 'hr_manager']);
 
-                        // Check if user exists but hasn't set up their account
-                        $needsSetup = $record->user &&
-                            (
-                                !$record->user->password ||
-                                $record->user->password === Hash::make(Str::random(16)) ||
-                                !$record->user->email_verified_at
-                            );
+                        // Try to send SMS if phone number exists
+                        if ($record->phone_number) {
+                            try {
+                                $beemService = new BeemService();
+                                $smsMessage = "Your " . config('app.name') . " account setup link has been reset. Set up your account at: " . $setupUrl;
 
-                        return $hasPermission && $needsSetup;
+                                $result = $beemService->sendSMS($record->phone_number, $smsMessage);
+
+                                if ($result['success']) {
+                                    $smsSent = true;
+                                } else {
+                                    $errors['sms'] = $result['error'] ?? 'Unknown SMS error';
+                                    Log::warning('SMS sending failed for employee: ' . $record->id, [
+                                        'error' => $result['error'] ?? 'Unknown error'
+                                    ]);
+                                }
+                            } catch (\Exception $e) {
+                                $errors['sms'] = $e->getMessage();
+                                Log::error('Failed to send setup SMS', [
+                                    'employee_id' => $record->id,
+                                    'error' => $e->getMessage()
+                                ]);
+                            }
+                        }
+                        // Determine notification type based on results
+                        if ($emailSent || $smsSent) {
+                            $channels = [];
+                            if ($emailSent) $channels[] = 'email';
+                            if ($smsSent) $channels[] = 'SMS';
+                            $notification = Notification::make()
+                                ->success()
+                                ->title('Setup Link Sent')
+                                ->body('Setup link sent via ' . implode(' and ', $channels) . '.');
+
+                            if (!empty($errors)) {
+                                $failedChannels = array_keys($errors);
+                                $notification->body($notification->getBody() . ' Failed to send via ' . implode(' and ', $failedChannels) . '.');
+                            }
+
+                            $notification->send();
+                        } else {
+                            Notification::make()
+                                ->danger()
+                                ->title('Setup Link Failed')
+                                ->body('Failed to send setup link through any channel. Please try again.')
+                                ->send();
+
+                            Log::error('Failed to send setup link through any channel', [
+                                'employee_id' => $record->id,
+                                'errors' => $errors
+                            ]);
+                        }
                     }),
                 ExportEmployeeProfileAction::make()
                     ->visible(fn() => auth()->user()->can('export_employee')),
             ])
             ->headerActions([
-                ImportAction::make()
-                    ->importer(EmployeeImporter::class)
-                    ->color('warning')
-                    ->visible(fn() => auth()->user()->can('import_employee')),
+//                ImportAction::make()
+//                ->importer(EmployeeImporter::class)
+//                ->visible(fn() => auth()->user()->can('import_employee')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make()
                         ->visible(fn() => auth()->user()->can('delete_any_employee')),
-                    ExportEmployeeProfileAction::make()
-                        ->visible(fn() => auth()->user()->can('export_employee')),
+//                    ExportEmployeeProfileAction::make()
+//                        ->visible(fn() => auth()->user()->can('export_employee')),
                 ]),
             ]);
     }
@@ -500,15 +728,14 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     public static function getRelations(): array
     {
         return [
-       DependentsRelationManager::class,
-           EmergencyContactsRelationManager::class,
+            DependentsRelationManager::class,
+            EmergencyContactsRelationManager::class,
             SkillsRelationManager::class,
-           DocumentsRelationManager::class,
-           EducationRelationManager::class,
-           FinancialsRelationManager::class,
+            DocumentsRelationManager::class,
+            EducationRelationManager::class,
+            FinancialsRelationManager::class,
         ];
     }
-
     public static function getPages(): array
     {
         return [
@@ -548,7 +775,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
             $query->where('id', auth()->user()->employee?->id);
         } // For users with no specific role
         else {
-            $query->where('id', null); // No access
+            $query->where('id', null);
         }
 
         return $query->whereNull('deleted_at');
@@ -558,27 +785,22 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     {
         return static::getModel()::where('employment_status', 'active')->count();
     }
-
     public static function getNavigationBadgeColor(): ?string
     {
         return 'success';
     }
-
     public static function shouldRegisterNavigation(): bool
     {
         return auth()->user()->can('view_any_employee');
     }
-
     public static function canViewAny(): bool
     {
         return auth()->user()->can('view_any_employee');
     }
-
     public static function canCreate(): bool
     {
         return auth()->user()->can('create_employee');
     }
-
     public static function afterCreate(Model $record): void
     {
         // Generate a random token for account setup
@@ -589,6 +811,12 @@ class EmployeeResource extends Resource implements HasShieldPermissions
 
         // Send email to employee
         Mail::to($record->email)->send(new NewEmployeeAccountSetupMail($record, $token));
+    }
+    public static function getImports(): array
+    {
+        return [
+            EmployeeImporter::class,
+        ];
     }
 
 

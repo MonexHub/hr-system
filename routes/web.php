@@ -39,3 +39,6 @@ Route::prefix('jobs')->name('jobs.')->group(function () {
     Route::get('/{jobPosting}', [PublicJobController::class, 'show'])->name('show');
 });
 
+Route::get('/employee/resume/{employee}', [\App\Http\Controllers\EmployeeResumeController::class, 'show'])
+    ->name('employee.resume')
+    ->middleware(['auth']);

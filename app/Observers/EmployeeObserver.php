@@ -13,6 +13,8 @@ class EmployeeObserver
      */
     public function created(Employee $employee): void
     {
+
+        $employee->createDefaultNotificationPreferences();
         // Get all active leave types
         $leaveTypes = LeaveType::where('is_active', true)->get();
         $currentYear = now()->year;
@@ -33,4 +35,6 @@ class EmployeeObserver
             ]);
         }
     }
+
+
 }

@@ -98,10 +98,15 @@ class ShieldSeeder extends Seeder
             'delete_leave_request',
             'manage_all_leave_requests',
 
-            // Settings
+            // AppSettings
             'manage_system_settings',
             'manage_roles',
-            'manage_permissions'
+            'manage_permissions',
+
+            //Performance Management
+            'submit_performance::appraisal',
+            'supervisor_approve_performance::appraisal',
+            'hr_approve_performance::appraisal'
         ];
     }
 
@@ -187,7 +192,11 @@ class ShieldSeeder extends Seeder
             // Reporting
             'view_hr_dashboard',
             'generate_hr_reports',
-            'export_employee_data'
+            'export_employee_data',
+
+            // Performance Management
+            'supervisor_approve_performance::appraisal',
+            'hr_approve_performance::appraisal'
         ];
     }
 
@@ -213,7 +222,10 @@ class ShieldSeeder extends Seeder
             // Team Management
             'view_team_attendance',
             'view_team_performance',
-            'manage_team_goals'
+            'manage_team_goals',
+
+            // Performance Management
+            'supervisor_approve_performance::appraisal'
         ];
     }
 
@@ -224,6 +236,9 @@ class ShieldSeeder extends Seeder
             'view_profile',
             'update_profile',
             'view_documents',
+
+            //Perfomance Management
+            'submit_performance::appraisal',
 
             // Leave
             'view_own_leave_requests',

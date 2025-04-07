@@ -22,12 +22,12 @@ return new class extends Migration
             $table->date('evaluation_date')->nullable();
 
             // Performance Metrics (1-5 scale)
-            $table->integer('quality_of_work')->comment('1-5 rating');
-            $table->integer('productivity')->comment('1-5 rating');
-            $table->integer('job_knowledge')->comment('1-5 rating');
-            $table->integer('reliability')->comment('1-5 rating');
-            $table->integer('communication')->comment('1-5 rating');
-            $table->integer('teamwork')->comment('1-5 rating');
+            $table->integer('quality_of_work')->comment('1-5 rating')->nullable();
+            $table->integer('productivity')->comment('1-5 rating')->nullable();
+            $table->integer('job_knowledge')->comment('1-5 rating')->nullable();
+            $table->integer('reliability')->comment('1-5 rating')->nullable();
+            $table->integer('communication')->comment('1-5 rating')->nullable();
+            $table->integer('teamwork')->comment('1-5 rating')->nullable();
 
             // Comments and Feedback
             $table->text('achievements')->nullable();

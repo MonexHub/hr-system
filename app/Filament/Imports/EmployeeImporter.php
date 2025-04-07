@@ -11,6 +11,7 @@ use Filament\Actions\Imports\Models\Import;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeImporter extends Importer
 {
@@ -73,107 +74,20 @@ class EmployeeImporter extends Importer
         ];
     }
 
-    public static function downloadSampleData(): Response
+    public function mutateBeforeCreate(array $data): array
     {
-        $headers = [
-            'employee_code',
-            'first_name',
-            'last_name',
-            'middle_name',
-            'gender',
-            'birthdate',
-            'contract_type',
-            'appointment_date',
-            'job_title',
-            'branch',
-            'department',
-            'salary',
-            'email'
-        ];
+        Log::info('🔥 mutateBeforeCreate() is being called!', $data);
 
-        $sampleData = [
-            [
-                'EMP001',
-                'John',
-                'Smith',
-                'Robert',
-                'male',
-                '15/01/1990',
-                'permanent',
-                '01/06/2023',
-                'Software Engineer',
-                'Main Office',
-                'Engineering',
-                '75000',
-                'john.smith@company.com'
-            ],
-            [
-                'EMP002',
-                'Sarah',
-                'Johnson',
-                'Marie',
-                'female',
-                '22/03/1988',
-                'contract',
-                '15/07/2023',
-                'Marketing Manager',
-                'Downtown',
-                'Marketing',
-                '65000',
-                'sarah.j@company.com'
-            ],
-            [
-                'EMP003',
-                'Michael',
-                'Williams',
-                'David',
-                'male',
-                '10/12/1992',
-                'probation',
-                '01/08/2023',
-                'Sales Representative',
-                'North Branch',
-                'Sales',
-                '45000',
-                'm.williams@company.com'
-            ]
-        ];
-
-        $output = fopen('php://temp', 'w+');
-        fputcsv($output, $headers);
-        foreach ($sampleData as $row) {
-            fputcsv($output, $row);
-        }
-        rewind($output);
-        $csv = stream_get_contents($output);
-        fclose($output);
-
-        return response($csv)
-            ->header('Content-Type', 'text/csv')
-            ->header('Content-Disposition', 'attachment; filename="sample_employees.csv"');
-    }
-
-    public function resolveRecord(): ?Employee
-    {
-        return new Employee();
-    }
-
-    protected function beforeCreate(): void
-    {
-        DB::transaction(function () {
+        try {
             // Format dates
-            try {
-                $this->data['birthdate'] = $this->formatDate($this->data['birthdate']);
-                $this->data['appointment_date'] = $this->formatDate($this->data['appointment_date']);
-            } catch (\Exception $e) {
-                throw new \Exception("Invalid date format: " . $e->getMessage());
-            }
+            $data['birthdate'] = $this->formatDate($data['birthdate']);
+            $data['appointment_date'] = $this->formatDate($data['appointment_date']);
 
             // Transform gender to lowercase
-            $this->data['gender'] = strtolower($this->data['gender']);
+            $data['gender'] = strtolower($data['gender']);
 
             // Transform contract type
-            $this->data['contract_type'] = match (strtolower($this->data['contract_type'])) {
+            $data['contract_type'] = match (strtolower($data['contract_type'])) {
                 'fixed term contract', 'contract' => 'contract',
                 'permanent' => 'permanent',
                 'probation' => 'probation',
@@ -181,42 +95,103 @@ class EmployeeImporter extends Importer
             };
 
             // Set default values
-            $this->data['application_status'] = 'active';
-            $this->data['employment_status'] = 'ACTIVE';
-            $this->data['terms_of_employment'] = 'full-time';
+            $data['application_status'] = 'active';
+            $data['employment_status'] = 'ACTIVE';
+            $data['terms_of_employment'] = 'full-time';
 
-            // Step 1: Create or find department
+            // Ensure department and job title are correctly mapped
             $department = Department::firstOrCreate(
-                ['name' => $this->data['department']],
+                ['name' => $data['department']],
                 [
-                    'code' => strtoupper(substr($this->data['department'], 0, 3)),
+                    'code' => strtoupper(substr($data['department'], 0, 3)),
                     'is_active' => true,
                     'current_headcount' => 0,
                     'max_headcount' => 999
                 ]
             );
 
-            // Step 2: Create or find job title
-            $jobTitle = JobTitle::firstOrCreate(
-                [
-                    'name' => $this->data['job_title'],
-                    'department_id' => $department->id
-                ],
-                [
+            // First try to find existing job title by name only
+            $jobTitle = JobTitle::where('name', $data['job_title'])->first();
+
+            if (!$jobTitle) {
+                // Create new job title if it doesn't exist
+                $jobTitle = JobTitle::create([
+                    'name' => $data['job_title'],
+                    'department_id' => $department->id,
                     'is_active' => true,
-                    'description' => "Position of {$this->data['job_title']}"
-                ]
-            );
+                    'description' => "Position of {$data['job_title']}"
+                ]);
+            } else {
+                // Update department if needed
+                if ($jobTitle->department_id !== $department->id) {
+                    $jobTitle->department_id = $department->id;
+                    $jobTitle->save();
+                }
+            }
 
-            // Step 3: Prepare employee data
-            $this->data['department_id'] = $department->id;
-            $this->data['job_title_id'] = $jobTitle->id;
+            // Remove original text fields
+            unset($data['department']);
+            unset($data['job_title']);
 
-            // Handle salary
-            $this->data['salary'] = (float) str_replace(',', '', $this->data['salary']);
-            $this->data['net_salary'] = $this->data['salary'];
-        });
+            // Assign relationship IDs
+            $data['department_id'] = $department->id;
+            $data['job_title_id'] = $jobTitle->id;
+
+            // Convert salary
+            $data['salary'] = (float) str_replace(',', '', $data['salary']);
+            $data['net_salary'] = $data['salary'];
+
+            Log::info('✅ Final Transformed Data:', $data);
+
+        } catch (\Throwable $th) {
+            Log::error('❌ Error in mutateBeforeCreate(): ' . $th->getMessage());
+            throw new \Exception('Import failed: ' . $th->getMessage());
+        }
+
+        return $data;
     }
+
+    function arrayToEmployeeModel(array $data): Employee
+{
+    Log::info('🔄 Transforming Array to Employee Model:', $data);
+
+    // Convert salary to float
+    $salary = isset($data['salary']) ? (float) str_replace(',', '', $data['salary']) : 0;
+
+    // Create Employee model instance
+    $employee = new Employee();
+
+    // Assign transformed values
+    $employee->employee_code = $data['employee_code'];
+    $employee->first_name = $data['first_name'] ?? 'Unknown';
+    $employee->last_name = $data['last_name'] ?? 'Unknown';
+    $employee->middle_name = $data['middle_name'] ?? null;
+    $employee->gender = strtolower($data['gender'] ?? 'unknown');
+    $employee->birthdate = $data['birthdate'];
+    $employee->contract_type = $data['contract_type'];
+    $employee->appointment_date = $data['appointment_date'];
+    $employee->branch = $data['branch'] ?? 'Unknown';
+    $employee->department_id = $data['department_id'];
+    $employee->job_title_id = $data['job_title_id'];
+    $employee->salary = $salary;
+    $employee->net_salary = $salary;
+    $employee->email = $data['email'] ?? null;
+    $employee->application_status = 'active';
+    $employee->employment_status = 'ACTIVE';
+    $employee->terms_of_employment = 'full-time';
+
+ try {
+    unset($employee->department);
+    unset($employee->job_title);
+ } catch (\Throwable $th) {
+    Log::error('❌ Error in arrayToEmployeeModel(): ' . $th->getMessage());
+    // throw new \Exception('Import failed: ' . $th->getMessage());
+ }
+
+    Log::info('✅ Employee Model Ready:', $employee->toArray());
+
+    return $employee;
+}
 
     protected function formatDate($date): string
     {
@@ -245,6 +220,8 @@ class EmployeeImporter extends Importer
 
     protected function afterCreate(): void
     {
+        Log::info('🔄 afterCreate() was triggered for employee:', ['id' => $this->record->id]);
+
         // Update department headcount
         $this->record->department?->incrementHeadcount();
     }
@@ -259,4 +236,10 @@ class EmployeeImporter extends Importer
 
         return $body;
     }
+
+    public function resolveRecord(): Employee
+{
+   $employeeRecord= $this->mutateBeforeCreate($this->data); // Ensure the function is called manually
+    return $this->arrayToEmployeeModel($employeeRecord);
+}
 }

@@ -12,6 +12,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Auth;
 
 class JobApplicationResource extends Resource
 {
@@ -156,8 +157,12 @@ class JobApplicationResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
 
+                // Edit action - Restricted for employees
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => !Auth::user()->hasRole('employee')),
+
+                // Cover Letter download - Available to all
                 Tables\Actions\Action::make('download_cover_letter')
                     ->icon('heroicon-o-document-arrow-down')
                     ->label('Cover Letter')
@@ -165,6 +170,7 @@ class JobApplicationResource extends Resource
                     ->openUrlInNewTab()
                     ->visible(fn ($record) => $record->cover_letter_path !== null),
 
+                // Shortlist action - Only for HR managers and above (not for employees or department heads)
                 Tables\Actions\Action::make('shortlist')
                     ->icon('heroicon-o-star')
                     ->color('warning')
@@ -175,8 +181,13 @@ class JobApplicationResource extends Resource
                             'application_id' => $record->id
                         ]));
                     })
-                    ->visible(fn ($record) => in_array($record->status, ['submitted', 'under_review'])),
+                    ->visible(fn ($record) =>
+                        in_array($record->status, ['submitted', 'under_review']) &&
+                        (Auth::user()->hasRole('hr_manager') ||
+                            Auth::user()->hasRole('chief_executive_officer') ||
+                            Auth::user()->hasRole('super_admin'))),
 
+                // Schedule Interview - Available to department heads and above
                 Tables\Actions\Action::make('schedule_interview')
                     ->icon('heroicon-o-calendar')
                     ->color('info')
@@ -188,8 +199,14 @@ class JobApplicationResource extends Resource
                             'interview_date' => now()->addDays(7)->toDateString()
                         ]));
                     })
-                    ->visible(fn ($record) => $record->status === 'shortlisted'),
+                    ->visible(fn ($record) =>
+                        $record->status === 'shortlisted' &&
+                        (Auth::user()->hasRole('department_head') ||
+                            Auth::user()->hasRole('hr_manager') ||
+                            Auth::user()->hasRole('chief_executive_officer') ||
+                            Auth::user()->hasRole('super_admin'))),
 
+                // Hire action - Only for HR managers and above
                 Tables\Actions\Action::make('hire')
                     ->icon('heroicon-o-user-plus')
                     ->color('success')
@@ -200,8 +217,13 @@ class JobApplicationResource extends Resource
                             'application_id' => $record->id
                         ]));
                     })
-                    ->visible(fn ($record) => $record->status === 'interview_scheduled'),
+                    ->visible(fn ($record) =>
+                        $record->status === 'interview_scheduled' &&
+                        (Auth::user()->hasRole('hr_manager') ||
+                            Auth::user()->hasRole('chief_executive_officer') ||
+                            Auth::user()->hasRole('super_admin'))),
 
+                // Reject action - Only for HR managers and above
                 Tables\Actions\Action::make('reject')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
@@ -213,11 +235,16 @@ class JobApplicationResource extends Resource
                             'application_id' => $record->id
                         ]));
                     })
-                    ->visible(fn ($record) => !in_array($record->status, ['rejected', 'hired'])),
+                    ->visible(fn ($record) =>
+                        !in_array($record->status, ['rejected', 'hired']) &&
+                        (Auth::user()->hasRole('hr_manager') ||
+                            Auth::user()->hasRole('chief_executive_officer') ||
+                            Auth::user()->hasRole('super_admin'))),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => !Auth::user()->hasRole('employee') && !Auth::user()->hasRole('department_head')),
                 ]),
             ]);
     }
@@ -245,5 +272,13 @@ class JobApplicationResource extends Resource
     public static function getNavigationBadgeColor(): ?string
     {
         return 'warning';
+    }
+
+    public static function canCreate(): bool
+    {
+        // Only HR managers and above can create new job applications
+        return Auth::user()->hasRole('hr_manager') ||
+            Auth::user()->hasRole('chief_executive_officer') ||
+            Auth::user()->hasRole('super_admin');
     }
 }
