@@ -21,6 +21,7 @@ use Symfony\Component\Mime\Address;
 use App\Services\BeemService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Bus\Batch;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class AuthController extends Controller
@@ -163,9 +164,34 @@ class AuthController extends Controller
                 'permanent_address' => 'sometimes|string',
                 'city' => 'sometimes|string',
                 'postal_code' => 'nullable|string',
+                'profile_photo' => 'sometimes|file|image|mimes:jpeg,png,jpg,gif|max:2048',
             ]);
 
+            if ($request->hasFile('profile_photo')) {
+                Log::info('Profile photo detected.');
+
+                if ($request->file('profile_photo')->isValid()) {
+                    $path = $request->file('profile_photo')->store('user-photos', 'public');
+                    $validated['profile_photo'] = $path;
+                    Log::info('Profile photo uploaded to: ' . $path);
+                } else {
+                    Log::warning('Uploaded profile photo is not valid.');
+                }
+            } else {
+                Log::info('No profile photo was uploaded.');
+            }
+
+            $validated['profile_photo'] = Storage::url($path);
+
             $employee->update($validated);
+
+
+
+            $user->update([
+                'email' => $validated['email'],
+                'phone_number' => $validated['phone_number'],
+                'avatar_url' => $validated['profile_photo']
+            ]);
 
             //Send a notification to the user
             try {
@@ -214,7 +240,27 @@ class AuthController extends Controller
                 ], 404);
             }
 
-            $path = $request->file('profile_photo')->store('employee-photos', 'public');
+            if ($request->hasFile('profile_photo')) {
+                Log::info('Profile photo detected.');
+
+                if ($request->file('profile_photo')->isValid()) {
+                    $path = $request->file('profile_photo')->store('user-photos', 'public');
+                    $validated['profile_photo'] = $path;
+                    Log::info('Profile photo uploaded to: ' . $path);
+                } else {
+                    Log::warning('Uploaded profile photo is not valid.');
+                }
+            } else {
+                Log::info('No profile photo was uploaded.');
+            }
+
+            $path = Storage::url($path);
+
+            $user=Auth::user();
+            $user= User::find($user->id);
+            $user->avatar_url = $path;
+            $user->save();
+
 
             $employee->profile_photo = $path;
             $employee->save();

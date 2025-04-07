@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Holiday;
+use App\Models\Employee;
 use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 
 class HolidayController extends Controller
 {
@@ -147,6 +149,40 @@ class HolidayController extends Controller
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Could not delete holiday',
+                'data' => null
+            ], 500);
+        }
+    }
+
+    public function getBirthdays()
+    {
+        try {
+            $birthdays = Employee::with('jobTitle') // eager load job title
+                ->orderByRaw('DAY(birthdate) DESC')
+                ->get(['id', 'first_name', 'last_name', 'birthdate', 'job_title_id'])
+                ->map(function ($employee) {
+                    return [
+                        'id' => $employee->id,
+                        'name' => $employee->first_name . ' ' . $employee->last_name,
+                        'description' => optional($employee->jobTitle)->name, // use job title as description
+                        'date' => $employee->birthdate,
+                        'type' => 'birthday',
+                        'status' => 'active',
+                        'is_today' => date('m-d') === date('m-d', strtotime($employee->birthdate)),
+                        'formatted_date' => Carbon::parse($employee->birthdate)->format('F j'),
+                    ];
+                });
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Birthdays retrieved successfully',
+                'data' => $birthdays
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch birthdays: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Could not fetch birthdays',
                 'data' => null
             ], 500);
         }

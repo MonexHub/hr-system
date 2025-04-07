@@ -31,7 +31,7 @@ Route::middleware(['auth:api'])->group(function () {
 
     Route::prefix('user')->group(function () {
         Route::get('', [AuthController::class, 'me']);
-        Route::put('', [AuthController::class, 'updateProfile']);
+        Route::post('', [AuthController::class, 'updateProfile']);
         Route::post('/upload-photo', [AuthController::class, 'uploadPhoto']);
         Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
     });
@@ -101,6 +101,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::prefix('holidays')->group(function () {
         Route::get('', [HolidayController::class, 'index']);
         Route::post('', [HolidayController::class, 'store']);
+        Route::get('/birthdays', [HolidayController::class, 'getBirthdays']);
         Route::get('/{id}', [HolidayController::class, 'show']);
         Route::put('/{id}', [HolidayController::class, 'update']);
         Route::delete('/{id}', [HolidayController::class, 'destroy']);
