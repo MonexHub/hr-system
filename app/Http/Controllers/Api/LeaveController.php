@@ -77,7 +77,8 @@ class LeaveController extends Controller
                 'leave_type_id' => 'required',
                 'start_date' => 'required',
                 'end_date' => 'required',
-                'reason' => 'required'
+                'reason' => 'required',
+                'total_days'=> 'required',
             ]);
 
             $leave = LeaveRequest::create($data);
