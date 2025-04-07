@@ -14,18 +14,26 @@ use App\Http\Controllers\Api\NotificationPreferenceController;
 
 
 
-Route::post('/login',[AuthController::class,'login']);
+Route::post('/login', [AuthController::class, 'login']);
 
+
+Route::prefix('auth')->group(function () {
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+});
 
 Route::middleware(['auth:api'])->group(function () {
 
+
+
     //Auth Routes
-    Route::get('/logout',[AuthController::class,'logout']);
+    Route::get('/logout', [AuthController::class, 'logout']);
 
     Route::prefix('user')->group(function () {
         Route::get('', [AuthController::class, 'me']);
         Route::put('', [AuthController::class, 'updateProfile']);
         Route::post('/upload-photo', [AuthController::class, 'uploadPhoto']);
+        Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
     });
 
 
@@ -36,6 +44,7 @@ Route::middleware(['auth:api'])->group(function () {
 
 
         Route::get('', [EmployeeController::class, 'index']);
+        Route::get('/team', [EmployeeController::class, 'getTeamMembers']);
         Route::post('', [EmployeeController::class, 'store']);
         Route::get('/{id}', [EmployeeController::class, 'show']);
         Route::put('/{id}', [EmployeeController::class, 'update']);
@@ -46,31 +55,32 @@ Route::middleware(['auth:api'])->group(function () {
 
 
 
-    Route::get('/{id}',[EmployeeController::class,'getEmployee']);
-    Route::put('/edit',[EmployeeController::class,'editEmployeeDetails']);
+        Route::get('/{id}', [EmployeeController::class, 'getEmployee']);
+        Route::put('/edit', [EmployeeController::class, 'editEmployeeDetails']);
 
-    //Employee Training Routes
-    Route::get('/training',[EmployeeController::class,'getEmployeeTraining']);
-    Route::get('/training/{id}',[EmployeeController::class,'getEmployeeTrainingDetails']);
+        //Employee Training Routes
+        Route::get('/training', [EmployeeController::class, 'getEmployeeTraining']);
+        Route::get('/training/{id}', [EmployeeController::class, 'getEmployeeTrainingDetails']);
 
 
-    //Employee Import Routes
+        //Employee Import Routes
 
-                   // CSV file upload + background import
-            Route::post('/import', [EmployeeController::class, 'import']);
-                        // CSV sample download
-            Route::get('/import/sample', [EmployeeController::class, 'downloadSample']);
+        // CSV file upload + background import
+        Route::post('/import', [EmployeeController::class, 'import']);
+        // CSV sample download
+        Route::get('/import/sample', [EmployeeController::class, 'downloadSample']);
     });
 
 
 
-        //Leave Routes
+    //Leave Routes
     Route::prefix('leave')->group(function () {
-        Route::get('/all/{id}',[LeaveController::class,'index']);
-        Route::get('/{id}',[LeaveController::class,'getLeave']);
-        Route::get('/type',[LeaveController::class,'leavetypes']);
-        Route::get('/type/{id}',[LeaveController::class,'getLeaveType']);
-        Route::post('/request',[LeaveController::class,'requestLeave']);
+        Route::get('/all/{id}', [LeaveController::class, 'index']);
+        Route::get('/type', [LeaveController::class, 'leavetypes']);
+        Route::get('/balance/{id}', [LeaveController::class, 'getLeaveBalance']);
+        Route::get('/type/{id}', [LeaveController::class, 'getLeaveType']);
+        Route::post('/request', [LeaveController::class, 'requestLeave']);
+        Route::get('/{id}', [LeaveController::class, 'getLeave']);
     });
 
     //Perfomance Appraisal Routes
@@ -113,19 +123,17 @@ Route::middleware(['auth:api'])->group(function () {
 
 
     //Attendance Routes
-    Route::get('/attendance',[AttendanceController::class,'index']);
-    Route::get('/attendances',[AttendanceController::class,'getAttendance']);
-    Route::get('/attendance/{id}',[AttendanceController::class,'getUserAttendanceDetails']);
+    Route::get('/attendance', [AttendanceController::class, 'index']);
+    Route::get('/attendances', [AttendanceController::class, 'getAttendance']);
+    Route::get('/attendance/{id}', [AttendanceController::class, 'getUserAttendanceDetails']);
 
 
     //Organization Routes
-    Route::get('/departments',[OrganizationController::class,'departments']);
-    Route::get('/jobtitles',[OrganizationController::class,'jobTitles']);
+    Route::get('/departments', [OrganizationController::class, 'departments']);
+    Route::get('/jobtitles', [OrganizationController::class, 'jobTitles']);
 
 
 
     //Notification Preferences
     Route::resource('notification-preferences', NotificationPreferenceController::class);
-
-
 });

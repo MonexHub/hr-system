@@ -35,6 +35,7 @@ class User extends Authenticatable
         'avatar_url',
         'is_active',
         'last_login_at',
+        'fcm_token'
     ];
 
     /**

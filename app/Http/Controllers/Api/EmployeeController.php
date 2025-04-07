@@ -15,60 +15,56 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\NewEmployeeAccountSetupMail;
 use App\Services\BeemService;
-use App\Filament\Imports\EmployeeImporter;
-use App\Models\Import;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Support\Facades\Response;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Gate;
+use App\Jobs\ImportEmployeesJob;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 
 
 
 class EmployeeController extends Controller
 {
-    public function index()    {
+    public function index()
+    {
         $user = Auth::user();
-        $query = Employee::query()->with(['department', 'jobTitle', 'user']);
-
-        if ($user->hasRole('employee')) {
-            $query->where('id', $user->employee->id);
-        } elseif ($user->hasRole('department_manager')) {
-            $query->where('department_id', $user->employee->department_id);
-        }
-
-        if ($request->has('department_id')) {
-            $query->where('department_id', $request->department_id);
-        }
-
-        if ($request->has('employment_status')) {
-            $query->where('employment_status', $request->employment_status);
-        }
-
-        if ($request->has('contract_type')) {
-            $query->where('contract_type', $request->contract_type);
-        }
+        $query = Employee::query()->with(['department', 'jobTitle']);
 
         return response()->json([
-            "message"=> "Employee Data",
-            "data"=> $query->latest()->get()
+            "message" => "Employee Data retrieved successfully",
+            "data" => $query->latest()->get()
         ], 200);
     }
 
-    public function getEmployee($id){
+
+    public function getTeamMembers()
+    {
+        $user = Auth::user();
+        $query = Employee::query()->with(['department', 'jobTitle']);
+        $query->where('department_id', $user->employee->department_id);
+
+        return response()->json([
+            "message" => "Employee Data",
+            "data" => $query->latest()->get()
+        ], 200);
+    }
+
+    public function getEmployee($id)
+    {
 
         $employee = Employee::find($id)->with(['department', 'jobTitle', 'user'])->first();
 
-        if($employee){
-            return response(['message' => 'Employee Detail',
-        'data' => $employee]);
-        }else{
+        if ($employee) {
+            return response([
+                'message' => 'Employee Detail',
+                'data' => $employee
+            ]);
+        } else {
             return response(['message' => 'Employee not found']);
         }
     }
 
 
-    public function editEmployeeDetails($request) {
+    public function editEmployeeDetails($request)
+    {
 
         $validatedData = $request->validate([
             'name' => 'required',
@@ -96,35 +92,40 @@ class EmployeeController extends Controller
 
         $employee->save();
 
-        return response(['message' => 'Employee Details Updated',
-    'data' => $employee]);
-
-
-
+        return response([
+            'message' => 'Employee Details Updated',
+            'data' => $employee
+        ]);
     }
 
 
-    public function getEmployeeTraining(){
+    public function getEmployeeTraining()
+    {
 
         $employee = EmployeeTraining::all();
 
-        if($employee){
-            return response(['message' => 'Employee Training',
-        'data' => $employee]);
-        }else{
-            return response(['message' => 'Employee not found'],402);
+        if ($employee) {
+            return response([
+                'message' => 'Employee Training',
+                'data' => $employee
+            ]);
+        } else {
+            return response(['message' => 'Employee not found'], 402);
         }
     }
 
-    public function getEmployeeTrainingDetails($id){
+    public function getEmployeeTrainingDetails($id)
+    {
 
         $employee = EmployeeTraining::where('employee_id', $id)->get();
 
-        if($employee){
-            return response(['message' => 'Employee Training Details',
-        'data' => $employee]);
-        }else{
-            return response(['message' => 'Employee not found'],403);
+        if ($employee) {
+            return response([
+                'message' => 'Employee Training Details',
+                'data' => $employee
+            ]);
+        } else {
+            return response(['message' => 'Employee not found'], 403);
         }
     }
 
@@ -269,7 +270,7 @@ class EmployeeController extends Controller
     }
 
 
-        /**
+    /**
      * Handle background import of CSV via EmployeeImporter.
      */
     public function import(Request $request)
@@ -286,10 +287,10 @@ class EmployeeController extends Controller
 
         ImportEmployeesJob::dispatch($path);
 
-        return response()->json(['message' => 'Import started.'], Response::HTTP_ACCEPTED);
+        return response()->json(['message' => 'Import started.'], 200);
     }
 
-            /**
+    /**
      * Download a CSV sample for the employee import.
      */
     public function downloadSample(): StreamedResponse
@@ -299,9 +300,19 @@ class EmployeeController extends Controller
         }
 
         $headers = [
-            'employee_code', 'first_name', 'last_name', 'middle_name',
-            'gender', 'birthdate', 'contract_type', 'appointment_date',
-            'job_title', 'branch', 'department', 'salary', 'email'
+            'employee_code',
+            'first_name',
+            'last_name',
+            'middle_name',
+            'gender',
+            'birthdate',
+            'contract_type',
+            'appointment_date',
+            'job_title',
+            'branch',
+            'department',
+            'salary',
+            'email'
         ];
 
         $callback = function () use ($headers) {
@@ -313,5 +324,4 @@ class EmployeeController extends Controller
 
         return response()->streamDownload($callback, 'employee_import_sample.csv');
     }
-
 }
