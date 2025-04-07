@@ -79,4 +79,9 @@ class EditPerformanceAppraisal extends EditRecord
                 ->options(fn () => AppraisalPeriodHelper::generatePeriods()),
         ];
     }
+
+    public function getRecord(): Model
+    {
+        return parent::getRecord();
+    }
 }

@@ -75,7 +75,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 'view', 'view_any', 'create', 'update', 'delete', 'delete_any'
             ],
 
-            // Settings
+            // AppSettings
             'job_title' => [
                 'view', 'view_any', 'create', 'update', 'delete', 'delete_any'
             ],

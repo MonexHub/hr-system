@@ -18,6 +18,37 @@ class LeaveRequest extends Model
 {
     use SoftDeletes, Notifiable;
 
+    protected $guarded = [];
+
+    /**
+     * The attributes that should not be persisted to the database.
+     *
+     * @var array
+     */
+    protected $transient = ['skipNotifications'];
+
+    /**
+     * Override the save method to remove transient attributes before saving
+     *
+     * @param array $options
+     * @return bool
+     */
+    public function save(array $options = [])
+    {
+        $attributes = $this->getAttributes();
+
+        // Remove any transient attributes
+        foreach ($this->transient as $attribute) {
+            if (array_key_exists($attribute, $attributes)) {
+                unset($attributes[$attribute]);
+            }
+        }
+
+        $this->setRawAttributes($attributes);
+
+        return parent::save($options);
+    }
+
     protected $fillable = [
         'request_number',
         'employee_id',
@@ -139,7 +170,8 @@ class LeaveRequest extends Model
         });
 
         static::updated(function ($leaveRequest) {
-            if ($leaveRequest->isDirty('status')) {
+            // Only process notifications if skipNotifications flag is false
+            if ($leaveRequest->isDirty('status') && !$leaveRequest->skipNotifications) {
                 $leaveRequest->handleStatusChangeNotifications();
             }
         });
@@ -454,7 +486,7 @@ class LeaveRequest extends Model
     }
 
     // Balance Management Methods
-    protected function updateLeaveBalance(): void
+    public function updateLeaveBalance(): void
     {
         try {
             $balance = $this->employee->leaveBalances()
@@ -493,7 +525,7 @@ class LeaveRequest extends Model
         }
     }
 
-    protected function releaseLeaveBalance(): void
+    public function releaseLeaveBalance(): void
     {
         try {
             $balance = $this->employee->leaveBalances()
@@ -626,7 +658,168 @@ class LeaveRequest extends Model
             ]);
         }
     }
+    public function notifyRejection(): void
+    {
+        try {
+            // Notify the employee
+            $this->employee->user->notify(new \App\Notifications\LeaveRequestNotification(
+                $this,
+                \App\Notifications\LeaveRequestNotification::TYPE_REJECTED,
+                'Your leave request has been rejected.'
+            ));
 
+            // If rejected by department head
+            if ($this->getOriginal('status') === self::STATUS_PENDING) {
+                // Notify HR for reference
+                $hrManagers = \App\Models\User::role('hr_manager')->get();
+                \Illuminate\Support\Facades\Notification::send($hrManagers, new \App\Notifications\LeaveRequestNotification(
+                    $this,
+                    \App\Notifications\LeaveRequestNotification::TYPE_REJECTED,
+                    "Leave request from {$this->employee->first_name} {$this->employee->last_name} has been rejected by department head."
+                ));
+            }
+            // If rejected by HR
+            elseif ($this->getOriginal('status') === self::STATUS_DEPARTMENT_APPROVED) {
+                // Notify department head
+                $departmentHead = \App\Models\User::role('department_head')
+                    ->whereHas('employee', function ($query) {
+                        $query->where('department_id', $this->employee->department_id);
+                    })
+                    ->first();
+
+                if ($departmentHead) {
+                    $departmentHead->notify(new \App\Notifications\LeaveRequestNotification(
+                        $this,
+                        \App\Notifications\LeaveRequestNotification::TYPE_REJECTED,
+                        "Leave request from {$this->employee->first_name} {$this->employee->last_name} has been rejected by HR."
+                    ));
+                }
+            }
+            // If rejected by CEO
+            elseif ($this->getOriginal('status') === self::STATUS_HR_APPROVED) {
+                // Notify HR
+                $hrManagers = \App\Models\User::role('hr_manager')->get();
+                \Illuminate\Support\Facades\Notification::send($hrManagers, new \App\Notifications\LeaveRequestNotification(
+                    $this,
+                    \App\Notifications\LeaveRequestNotification::TYPE_REJECTED,
+                    "Leave request from {$this->employee->first_name} {$this->employee->last_name} has been rejected by CEO."
+                ));
+            }
+
+            \Filament\Notifications\Notification::make()
+                ->title('Rejection Notification Sent')
+                ->body('The employee has been notified of the rejection.')
+                ->warning()
+                ->send();
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send rejection notification', [
+                'leave_request_id' => $this->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Notify about cancellation
+     */
+    public function notifyCancellation(): void
+    {
+        try {
+            // Get the canceller name
+            $canceller = \App\Models\User::find($this->cancelled_by);
+            $cancellerName = $canceller ? $canceller->name : 'A user';
+
+            // Determine if employee cancelled their own request
+            $selfCancelled = $this->cancelled_by === $this->employee->user->id;
+
+            // Message for notifications
+            $message = $selfCancelled
+                ? "Leave request has been cancelled by the employee."
+                : "Leave request has been cancelled by {$cancellerName}.";
+
+            // Employee notification (only if not self-cancelled)
+            if (!$selfCancelled) {
+                $this->employee->user->notify(new \App\Notifications\LeaveRequestNotification(
+                    $this,
+                    \App\Notifications\LeaveRequestNotification::TYPE_CANCELLED,
+                    'Your leave request has been cancelled.'
+                ));
+            }
+
+            // Notify relevant parties based on the previous status
+            $previousStatus = $this->getOriginal('status');
+
+            if ($previousStatus === self::STATUS_PENDING) {
+                // Notify department head if not the canceller
+                $departmentHead = \App\Models\User::role('department_head')
+                    ->whereHas('employee', function ($query) {
+                        $query->where('department_id', $this->employee->department_id);
+                    })
+                    ->first();
+
+                if ($departmentHead && $departmentHead->id !== $this->cancelled_by) {
+                    $departmentHead->notify(new \App\Notifications\LeaveRequestNotification(
+                        $this,
+                        \App\Notifications\LeaveRequestNotification::TYPE_CANCELLED,
+                        $message
+                    ));
+                }
+            }
+            elseif ($previousStatus === self::STATUS_DEPARTMENT_APPROVED) {
+                // Notify HR managers if not the canceller
+                $hrManagers = \App\Models\User::role('hr_manager')
+                    ->where('id', '!=', $this->cancelled_by)
+                    ->get();
+
+                \Illuminate\Support\Facades\Notification::send($hrManagers, new \App\Notifications\LeaveRequestNotification(
+                    $this,
+                    \App\Notifications\LeaveRequestNotification::TYPE_CANCELLED,
+                    $message
+                ));
+
+                // Also notify department head if they approved it and aren't the canceller
+                if ($this->department_approved_by && $this->department_approved_by !== $this->cancelled_by) {
+                    $departmentApprover = \App\Models\User::find($this->department_approved_by);
+                    if ($departmentApprover) {
+                        $departmentApprover->notify(new \App\Notifications\LeaveRequestNotification(
+                            $this,
+                            \App\Notifications\LeaveRequestNotification::TYPE_CANCELLED,
+                            $message
+                        ));
+                    }
+                }
+            }
+
+            // Log the cancellation
+            \Illuminate\Support\Facades\Log::info('Leave request cancelled', [
+                'leave_request_id' => $this->id,
+                'cancelled_by' => $this->cancelled_by,
+                'previous_status' => $previousStatus,
+                'cancelled_at' => $this->cancelled_at
+            ]);
+
+            // Display UI notification
+            \Filament\Notifications\Notification::make()
+                ->title('Cancellation Processed')
+                ->body('The leave request has been cancelled and all relevant parties have been notified.')
+                ->success()
+                ->send();
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to send cancellation notifications', [
+                'leave_request_id' => $this->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            \Filament\Notifications\Notification::make()
+                ->title('Notification Error')
+                ->body('The cancellation was processed but there was an error sending some notifications.')
+                ->warning()
+                ->send();
+        }
+    }
     protected static function notifyDepartmentHead(LeaveRequest $leaveRequest): void
     {
         try {
@@ -654,7 +847,7 @@ class LeaveRequest extends Model
         }
     }
 
-    protected static function notifyHRManagers(LeaveRequest $leaveRequest): void
+    public static function notifyHRManagers(LeaveRequest $leaveRequest): void
     {
         try {
             $hrManagers = User::role('hr_manager')->get();
@@ -670,7 +863,7 @@ class LeaveRequest extends Model
         }
     }
 
-    protected static function notifyCEO(LeaveRequest $leaveRequest): void
+    public static function notifyCEO(LeaveRequest $leaveRequest): void
     {
         try {
             $ceo = User::role('chief_executive_officer')->first();
@@ -698,7 +891,7 @@ class LeaveRequest extends Model
         return $prefix . $year . str_pad($sequence, 5, '0', STR_PAD_LEFT);
     }
 
-    protected function notifyDepartmentApproval(): void
+    public function notifyDepartmentApproval(): void
     {
         try {
             $employeeName = "{$this->employee->first_name} {$this->employee->last_name}";
@@ -726,7 +919,7 @@ class LeaveRequest extends Model
         }
     }
 
-    protected function notifyHRApproval(): void
+    public function notifyHRApproval(): void
     {
         try {
             $employeeName = "{$this->employee->first_name} {$this->employee->last_name}";
@@ -768,7 +961,6 @@ class LeaveRequest extends Model
     {
         try {
             DB::beginTransaction();
-
             // Update status and appropriate remarks column based on approval stage
             $updateData = ['status' => self::STATUS_APPROVED];
 
@@ -822,7 +1014,21 @@ class LeaveRequest extends Model
         }
     }
 
-    protected function notifyFinalApproval(): void
+    public function isEmployeeHRManager(): bool
+    {
+        if (!$this->relationLoaded('employee')) {
+            $this->load('employee');
+        }
+        if ($this->employee && !$this->employee->relationLoaded('user')) {
+            $this->employee->load('user');
+        }
+
+        return $this->employee &&
+            $this->employee->user &&
+            $this->employee->user->hasRole('hr_manager');
+    }
+
+    public function notifyFinalApproval(): void
     {
         try {
             // Notify the employee
@@ -876,10 +1082,8 @@ class LeaveRequest extends Model
                 ->warning()
                 ->send();
         }
+
     }
-
-
-
     public function getApprovalTimeline(): array
     {
         return array_filter([

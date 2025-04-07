@@ -23,15 +23,7 @@ class FinancialsRelationManager extends RelationManager
                     ->schema([
                         Forms\Components\Select::make('bank_name')
                             ->label('Bank Name')
-                            ->options([
-                                'EQUITY' => 'Equity Bank',
-                                'KCB' => 'KCB Bank',
-                                'COOP' => 'Cooperative Bank',
-                                'ABSA' => 'ABSA Bank',
-                                'STANBIC' => 'Stanbic Bank',
-                                'NCBA' => 'NCBA Bank',
-                                'DTB' => 'Diamond Trust Bank',
-                            ])
+                            ->options(config('banks.banks'))
                             ->required()
                             ->native(false)
                             ->searchable()
@@ -129,15 +121,7 @@ class FinancialsRelationManager extends RelationManager
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('bank_name')
-                    ->options([
-                        'EQUITY' => 'Equity Bank',
-                        'KCB' => 'KCB Bank',
-                        'COOP' => 'Cooperative Bank',
-                        'ABSA' => 'ABSA Bank',
-                        'STANBIC' => 'Stanbic Bank',
-                        'NCBA' => 'NCBA Bank',
-                        'DTB' => 'Diamond Trust Bank',
-                    ]),
+                    ->options(config('banks.banks')),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()

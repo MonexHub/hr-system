@@ -50,6 +50,11 @@ class PerformanceAppraisal extends Model
 
 
     // Relationships
+    public function objectives()
+    {
+        return $this->hasMany(PerformanceObjective::class);
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_id');
