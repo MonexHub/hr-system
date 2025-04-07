@@ -100,6 +100,9 @@ class AuthController extends Controller
         try {
             $user = Auth::user();
 
+            $user->load('employee');
+
+
             $employee = $user->employee()->with([
                 'department:id,name',
                 'jobTitle:id,name',
@@ -111,6 +114,12 @@ class AuthController extends Controller
                 'financials',
                 'notificationPreferences'
             ])->first();
+
+            $roles = $user->getRoleNames();
+            $permissions = $user->getAllPermissions()->pluck('name');
+
+            $employee['roles'] = $roles;
+            $employee['permissions'] = $permissions;
 
             if (!$employee) {
                 return response()->json([
@@ -256,8 +265,8 @@ class AuthController extends Controller
 
             $path = Storage::url($path);
 
-            $user=Auth::user();
-            $user= User::find($user->id);
+            $user = Auth::user();
+            $user = User::find($user->id);
             $user->avatar_url = $path;
             $user->save();
 
@@ -323,12 +332,12 @@ class AuthController extends Controller
         $identifier = $request->input('identifier');
 
         $user = Employee::where('email', $request->identifier)
-        ->orWhere('phone_number', $request->identifier)
-        ->first();
+            ->orWhere('phone_number', $request->identifier)
+            ->first();
 
-        $userData=  User::where('id', $user->user_id)->first();
+        $userData =  User::where('id', $user->user_id)->first();
 
-        if (!$user&&!$userData) {
+        if (!$user && !$userData) {
             return response()->json([
                 'status' => 'failed',
                 'message' => 'Employee not found',
@@ -386,25 +395,25 @@ class AuthController extends Controller
             ], 404);
         }
 
-        $user= User::where('id', $user->user_id)->first();
+        $user = User::where('id', $user->user_id)->first();
 
         $user->password = Hash::make($request->password);
         $user->save();
 
-                   //Send a notification to the user
-                   try {
-                    if ($user->fcm_token) {
-                        $firebase = new FirebaseNotificationService();
-                        $firebase->send([
-                            'token' => $user->fcm_token,
-                            'title' => 'Profile Update',
-                            'body' => 'You have successfully changed your password.',
-                            'data' => ['type' => 'password_reset']
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    Log::error('Failed to send verification notification: ' . $e->getMessage());
-                }
+        //Send a notification to the user
+        try {
+            if ($user->fcm_token) {
+                $firebase = new FirebaseNotificationService();
+                $firebase->send([
+                    'token' => $user->fcm_token,
+                    'title' => 'Profile Update',
+                    'body' => 'You have successfully changed your password.',
+                    'data' => ['type' => 'password_reset']
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::error('Failed to send verification notification: ' . $e->getMessage());
+        }
 
         return response()->json([
             'status' => 'success',

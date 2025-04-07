@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\OrganizationController;
-use App\Http\Controllers\Api\PerfomanceAppraisalController;
+use App\Http\Controllers\Api\PerformanceAppraisalController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
@@ -33,12 +33,25 @@ Route::middleware(['auth:api'])->group(function () {
         Route::get('', [AuthController::class, 'me']);
         Route::post('', [AuthController::class, 'updateProfile']);
         Route::post('/upload-photo', [AuthController::class, 'uploadPhoto']);
-        Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth:api');
+        Route::post('change-password', [AuthController::class, 'changePassword']);
+    });
+
+    Route::prefix('appraisals')->group(function () {
+        Route::get('/', [PerformanceAppraisalController::class, 'index']); // List all
+        Route::post('/', [PerformanceAppraisalController::class, 'store']); // Create new
+        Route::get('/{appraisal}', [PerformanceAppraisalController::class, 'show']); // View single
+
+        Route::put('/{appraisal}', [PerformanceAppraisalController::class, 'update']); // Update
+        Route::delete('/{appraisal}', [PerformanceAppraisalController::class, 'destroy']); // Delete
+
+        // Appraisal workflow actions
+        Route::get('/{appraisal}/submit', [PerformanceAppraisalController::class, 'submit']);
+        Route::get('/{appraisal}/supervisor-approve', [PerformanceAppraisalController::class, 'supervisorApprove']);
+        Route::get('/{appraisal}/hr-approve', [PerformanceAppraisalController::class, 'hrApprove']);
     });
 
 
     //Employee Routes
-
     Route::prefix('employees')->group(function () {
 
 
@@ -84,17 +97,17 @@ Route::middleware(['auth:api'])->group(function () {
     });
 
     //Perfomance Appraisal Routes
-    Route::prefix('appraisals')->group(function () {
-        Route::get('', [PerfomanceAppraisalController::class, 'index']);
-        Route::post('', [PerfomanceAppraisalController::class, 'store']);
-        Route::get('/{id}', [PerfomanceAppraisalController::class, 'show']);
-        Route::put('/{id}', [PerfomanceAppraisalController::class, 'update']);
-        Route::delete('/{id}', [PerfomanceAppraisalController::class, 'destroy']);
-        Route::post('/{id}/restore', [PerfomanceAppraisalController::class, 'restore']);
-        Route::post('/{id}/submit', [PerfomanceAppraisalController::class, 'submit']);
-        Route::post('/{id}/supervisor-approve', [PerfomanceAppraisalController::class, 'supervisorApprove']);
-        Route::post('/{id}/hr-approve', [PerfomanceAppraisalController::class, 'hrApprove']);
-    });
+    // Route::prefix('appraisals')->group(function () {
+    //     Route::get('', [PerfomanceAppraisalController::class, 'index']);
+    //     Route::post('', [PerfomanceAppraisalController::class, 'store']);
+    //     Route::get('/{id}', [PerfomanceAppraisalController::class, 'show']);
+    //     Route::put('/{id}', [PerfomanceAppraisalController::class, 'update']);
+    //     Route::delete('/{id}', [PerfomanceAppraisalController::class, 'destroy']);
+    //     Route::post('/{id}/restore', [PerfomanceAppraisalController::class, 'restore']);
+    //     Route::post('/{id}/submit', [PerfomanceAppraisalController::class, 'submit']);
+    //     Route::post('/{id}/supervisor-approve', [PerfomanceAppraisalController::class, 'supervisorApprove']);
+    //     Route::post('/{id}/hr-approve', [PerfomanceAppraisalController::class, 'hrApprove']);
+    // });
 
 
     //Holiday Routes
