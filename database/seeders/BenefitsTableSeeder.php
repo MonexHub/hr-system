@@ -4,12 +4,13 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Benefit;
+use Illuminate\Support\Facades\DB;
 
 class BenefitsTableSeeder extends Seeder
 {
     public function run(): void
     {
-        Benefit::truncate();
+        DB::table('benefits')->delete();
 
         Benefit::insert([
             [

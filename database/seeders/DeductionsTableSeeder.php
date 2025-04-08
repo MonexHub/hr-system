@@ -4,12 +4,13 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Deduction;
+use Illuminate\Support\Facades\DB;
 
 class DeductionsTableSeeder extends Seeder
 {
     public function run(): void
     {
-        Deduction::truncate();
+        DB::table('employee_deductions')->delete();
 
         Deduction::insert([
             [

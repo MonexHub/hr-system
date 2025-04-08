@@ -4,12 +4,13 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\LoanType;
+use Illuminate\Support\Facades\DB;
 
 class LoanTypesTableSeeder extends Seeder
 {
     public function run(): void
     {
-        LoanType::truncate();
+        DB::table('loan_types')->delete();
 
         LoanType::insert([
             [

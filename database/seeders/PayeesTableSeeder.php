@@ -4,12 +4,13 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Payee;
+use Illuminate\Support\Facades\DB;
 
 class PayeesTableSeeder extends Seeder
 {
     public function run(): void
     {
-        Payee::truncate();
+        DB::table('payees')->delete();
 
         Payee::insert([
             [
