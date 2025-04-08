@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PerformanceAppraisalController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\JobPostingController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\PayrollController;
 
@@ -21,6 +22,23 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware(['auth:api'])->group(function () {
+
+    Route::prefix('jobs')->group(function () {
+        // Create a job post
+        Route::post('', [JobPostingController::class, 'store']);
+
+        // Get all job posts with their applicants
+        Route::get('', [JobPostingController::class, 'index']);
+
+        // Get candidates for a specific job post
+        Route::get('/{jobPostingId}/candidates', [JobPostingController::class, 'candidates']);
+
+        // Schedule an interview for a specific job application
+        Route::post('/applications/{applicationId}/schedule-interview', [JobPostingController::class, 'scheduleInterview']);
+
+        // Hire a candidate for a specific job application
+        Route::post('/applications/{applicationId}/hire', [JobPostingController::class, 'hireCandidate']);
+    });
 
 
 
