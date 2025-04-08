@@ -36,7 +36,10 @@ class AuthController extends Controller
                 'fcm_token' => 'sometimes|string',
             ]);
 
-            if (!Auth::attempt($validatedData)) {
+            if (!Auth::attempt([
+                'email' => $validatedData['email'],
+                'password' => $validatedData['password'],
+            ])) {
                 return response()->json([
                     'status' => 'failed',
                     'message' => 'Invalid credentials',

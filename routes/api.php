@@ -9,10 +9,9 @@ use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\PerformanceAppraisalController;
 use App\Http\Controllers\Api\HolidayController;
 use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\JobPostingController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
-
-
-
+use App\Http\Controllers\Api\PayrollController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
@@ -23,6 +22,23 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware(['auth:api'])->group(function () {
+
+    Route::prefix('jobs')->group(function () {
+        // Create a job post
+        Route::post('', [JobPostingController::class, 'store']);
+
+        // Get all job posts with their applicants
+        Route::get('', [JobPostingController::class, 'index']);
+
+        // Get candidates for a specific job post
+        Route::get('/{jobPostingId}/candidates', [JobPostingController::class, 'candidates']);
+
+        // Schedule an interview for a specific job application
+        Route::post('/applications/{applicationId}/schedule-interview', [JobPostingController::class, 'scheduleInterview']);
+
+        // Hire a candidate for a specific job application
+        Route::post('/applications/{applicationId}/hire', [JobPostingController::class, 'hireCandidate']);
+    });
 
 
 
@@ -96,18 +112,24 @@ Route::middleware(['auth:api'])->group(function () {
         Route::get('/{id}', [LeaveController::class, 'getLeave']);
     });
 
-    //Perfomance Appraisal Routes
-    // Route::prefix('appraisals')->group(function () {
-    //     Route::get('', [PerfomanceAppraisalController::class, 'index']);
-    //     Route::post('', [PerfomanceAppraisalController::class, 'store']);
-    //     Route::get('/{id}', [PerfomanceAppraisalController::class, 'show']);
-    //     Route::put('/{id}', [PerfomanceAppraisalController::class, 'update']);
-    //     Route::delete('/{id}', [PerfomanceAppraisalController::class, 'destroy']);
-    //     Route::post('/{id}/restore', [PerfomanceAppraisalController::class, 'restore']);
-    //     Route::post('/{id}/submit', [PerfomanceAppraisalController::class, 'submit']);
-    //     Route::post('/{id}/supervisor-approve', [PerfomanceAppraisalController::class, 'supervisorApprove']);
-    //     Route::post('/{id}/hr-approve', [PerfomanceAppraisalController::class, 'hrApprove']);
-    // });
+    //Payroll Management Routes
+    Route::prefix('payroll')->controller(PayrollController::class)->group(function () {
+        // Generate payroll
+        Route::post('generate/all', 'generateForAll');                          // Generate payroll for all employees
+        Route::post('generate/employee/{employee}', 'generateForEmployee');    // Generate payroll for a specific employee
+
+        // List and view payroll
+        Route::post('list/all', 'index');
+        Route::get('employee/{employee}/list', 'listPayrollsForEmployee');     // List all payrolls for an employee
+        Route::get('details/{payrollId}', 'getPayrollDetails');                // Get full payroll detail
+
+        // Process payroll payments
+        Route::post('process/payments', 'processAllPayments');                 // Process all pending payments
+        Route::post('process/{payrollId}/payment', 'processSinglePayment');   // Process single payroll payment
+
+        // Download payslip PDF
+        Route::get('payslip/{payrollId}/download', 'downloadPayslip');         // Download payslip as PDF
+    });
 
 
     //Holiday Routes

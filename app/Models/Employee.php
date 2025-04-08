@@ -19,7 +19,7 @@ use Carbon\CarbonImmutable;
 
 class Employee extends Model
 {
-    use SoftDeletes,Notifiable;
+    use SoftDeletes, Notifiable;
     public const PROBATION_DURATION = 3;
     public const CONTRACT_STATUSES = [
         'permanent' => 'Permanent',
@@ -68,19 +68,19 @@ class Employee extends Model
     protected $guarded = ['department', 'job_title'];
 
     protected static function boot()
-{
-    parent::boot();
+    {
+        parent::boot();
 
-    static::creating(function ($employee) {
-        unset($employee->department);
-        unset($employee->job_title);
-    });
+        static::creating(function ($employee) {
+            unset($employee->department);
+            unset($employee->job_title);
+        });
 
-    static::saving(function ($employee) {
-        unset($employee->department);
-        unset($employee->job_title);
-    });
-}
+        static::saving(function ($employee) {
+            unset($employee->department);
+            unset($employee->job_title);
+        });
+    }
 
     // Self-referencing relationships
     public function reportingTo(): BelongsTo
@@ -158,7 +158,7 @@ class Employee extends Model
     public function fullName(): Attribute
     {
         return Attribute::make(
-            get: fn () => trim(implode(' ', array_filter([
+            get: fn() => trim(implode(' ', array_filter([
                 $this->first_name,
                 $this->middle_name,
                 $this->last_name,
@@ -243,9 +243,15 @@ class Employee extends Model
         return $this->hasMany(EmployeeDocument::class);
     }
 
+
     public function financials()
     {
         return $this->hasMany(EmployeeFinancial::class);
+    }
+
+    public function latestFinancial()
+    {
+        return $this->hasOne(EmployeeFinancial::class)->latestOfMany();
     }
 
 
@@ -271,7 +277,7 @@ class Employee extends Model
         return $this->hasMany(PerformanceAppraisal::class, 'supervisor_id');
     }
 
-// Helper methods for appraisals
+    // Helper methods for appraisals
     public function getLatestAppraisal()
     {
         return $this->performanceAppraisals()
@@ -350,7 +356,7 @@ class Employee extends Model
             return false;
         }
         return ($balance->entitled_days + $balance->carried_forward_days + $balance->additional_days
-                - $balance->taken_days - $balance->pending_days) >= $requestedDays;
+            - $balance->taken_days - $balance->pending_days) >= $requestedDays;
     }
 
     /**
@@ -460,7 +466,7 @@ class Employee extends Model
     }
 
 
-// In Department.php - Add department head relationship
+    // In Department.php - Add department head relationship
     public function departmentHead(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'department_head_id');
@@ -523,13 +529,20 @@ class Employee extends Model
 
             // Ordered by likelihood of occurrence in the input data
             $formats = [
-                'd-M-y', 'd-M-Y',    // DD-MMM-YY/YYYY (14-Feb-21)
-                'd-m-y', 'd-m-Y',    // DD-MM-YY/YYYY
-                'm-d-y', 'm-d-Y',    // MM-DD-YY/YYYY
-                'y-m-d', 'Y-m-d',    // YY/YYYY-MM-DD
-                'M-d-y', 'M-d-Y',    // MMM-DD-YY/YYYY (Feb-14-21)
-                'j M y', 'j M Y',    // DD MMM YY/YYYY (14 Feb 21)
-                'M j, Y', 'M j, y',  // MMM DD, YYYY/YY (Feb 14, 2021)
+                'd-M-y',
+                'd-M-Y',    // DD-MMM-YY/YYYY (14-Feb-21)
+                'd-m-y',
+                'd-m-Y',    // DD-MM-YY/YYYY
+                'm-d-y',
+                'm-d-Y',    // MM-DD-YY/YYYY
+                'y-m-d',
+                'Y-m-d',    // YY/YYYY-MM-DD
+                'M-d-y',
+                'M-d-Y',    // MMM-DD-YY/YYYY (Feb-14-21)
+                'j M y',
+                'j M Y',    // DD MMM YY/YYYY (14 Feb 21)
+                'M j, Y',
+                'M j, y',  // MMM DD, YYYY/YY (Feb 14, 2021)
             ];
 
             foreach ($formats as $format) {
@@ -573,7 +586,6 @@ class Employee extends Model
                 ]);
                 throw new Exception("Unparseable date: {$value}");
             }
-
         } catch (\Throwable $th) {
             Log::error('DATE PARSE ERROR', [
                 'original_value' => $value,
@@ -690,8 +702,10 @@ class Employee extends Model
         $probationEndDate = DB::raw('DATE_ADD(appointment_date, INTERVAL ' . static::PROBATION_DURATION . ' MONTH)');
 
         return $query->where('contract_type', 'probation')
-            ->whereRaw("DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)",
-                [static::PROBATION_DURATION, $days]);
+            ->whereRaw(
+                "DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)",
+                [static::PROBATION_DURATION, $days]
+            );
     }
 
     public function scopeContractExpiringSoon($query, $days = 30)
@@ -704,8 +718,10 @@ class Employee extends Model
         })->orWhere(function ($query) use ($days) {
             // For probation periods
             $query->where('contract_type', 'probation')
-                ->whereRaw('DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)',
-                    [static::PROBATION_DURATION, $days]);
+                ->whereRaw(
+                    'DATE_ADD(appointment_date, INTERVAL ? MONTH) BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL ? DAY)',
+                    [static::PROBATION_DURATION, $days]
+                );
         });
     }
 
@@ -745,9 +761,4 @@ class Employee extends Model
 
         return now()->diffInDays($probationEndDate);
     }
-
-
-
-
-
 }
