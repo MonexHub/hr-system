@@ -18,6 +18,7 @@ class Benefit extends Model
     protected $casts = [
         'value' => 'decimal:2',
         'amount' => 'decimal:2',
+        'applies_to_all' => 'boolean'
     ];
 
     public function payroll()

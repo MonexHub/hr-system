@@ -119,7 +119,7 @@ Route::middleware(['auth:api'])->group(function () {
         Route::post('generate/employee/{employee}', 'generateForEmployee');    // Generate payroll for a specific employee
 
         // List and view payroll
-        Route::post('list/all', 'index');
+        Route::get('list/all', 'index');
         Route::get('employee/{employee}/list', 'listPayrollsForEmployee');     // List all payrolls for an employee
         Route::get('details/{payrollId}', 'getPayrollDetails');                // Get full payroll detail
 
@@ -129,6 +129,10 @@ Route::middleware(['auth:api'])->group(function () {
 
         // Download payslip PDF
         Route::get('payslip/{payrollId}/download', 'downloadPayslip');         // Download payslip as PDF
+        Route::get('employee/{employee}/summary', 'getFinancialSummary');                 // Get a summary of an employee's financials
+        Route::get('company-summary', 'getCompanyFinancialSummary');                    // Get a summary of the company's financials
+        Route::get('deductions', 'getCompanyDeductions');                    // Get a summary of the company's financials
+        Route::get('benefits', 'getCompanyBenefits');                    // Get a summary of the company's financials
     });
 
 
