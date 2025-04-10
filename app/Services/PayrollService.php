@@ -562,4 +562,142 @@ class PayrollService
             throw new \Exception("No payslips could be generated");
         }
     }
+    /**
+     * Get a summary of the employee's financials
+     */
+    public function getFinancialSummary(Employee $employee, ?Carbon $period = null): array
+    {
+        if (!$period) {
+            return $this->getLifetimeFinancialSummary($employee);
+        }
+
+        $gross = $employee->salary;
+        $totalBenefits = $this->calculateBenefits($employee, $gross);
+        $paye = $this->calculatePAYE($gross);
+        $loanRepayment = $this->calculateLoanRepayment($employee, $period);
+        $totalDeductions = $this->calculateDeductions($employee, $gross) + $paye + $loanRepayment;
+        $net = $gross + $totalBenefits - $totalDeductions;
+
+        $activeLoans = $employee->employeeLoans()
+            ->where('status', 'in_repayment')
+            ->where('repayment_start_date', '<=', $period->startOfMonth())
+            ->get();
+
+        $pendingLoans = $employee->employeeLoans()
+            ->where('status', 'pending')
+            ->get();
+
+        $pendingRepayments = $activeLoans->sum('monthly_installment');
+
+        return [
+            'gross_salary' => round($gross, 2),
+            'total_benefits' => round($totalBenefits, 2),
+            'total_deductions' => round($totalDeductions, 2),
+            'net_salary' => round($net, 2),
+            'loan_summary' => [
+                'active_loans_count' => $activeLoans->count(),
+                'pending_loans_count' => $pendingLoans->count(),
+                'pending_repayments_total' => round($pendingRepayments, 2),
+                'active_loans' => $activeLoans->map->only(['id', 'amount_approved', 'monthly_installment', 'repayment_start_date', 'status']),
+                'pending_loans' => $pendingLoans->map->only(['id', 'amount_requested', 'status']),
+            ],
+        ];
+    }
+
+    /**
+     * Get lifetime financial summary for the employee
+     */
+    public function getLifetimeFinancialSummary(Employee $employee): array
+    {
+        $gross = $employee->salary;
+
+        $allPayrolls = Payroll::where('employee_id', $employee->id)->get();
+
+        $totalGross = $allPayrolls->sum('gross_salary');
+        $totalBenefits = $allPayrolls->sum('total_benefits');
+        $totalDeductions = $allPayrolls->sum('total_deductions');
+        $net = $allPayrolls->sum('net_pay');
+
+        $allLoans = $employee->employeeLoans()->get();
+        $activeLoans = $allLoans->where('status', 'in_repayment');
+        $pendingLoans = $allLoans->where('status', 'pending');
+        $repaidLoans = $allLoans->where('status', 'paid');
+
+        $pendingRepayments = $activeLoans->sum('monthly_installment');
+
+        return [
+            'gross_salary_total' => round($totalGross, 2),
+            'total_benefits' => round($totalBenefits, 2),
+            'total_deductions' => round($totalDeductions, 2),
+            'net_salary_total' => round($net, 2),
+            'loan_summary' => [
+                'total_loans' => $allLoans->count(),
+                'active_loans_count' => $activeLoans->count(),
+                'pending_loans_count' => $pendingLoans->count(),
+                'repaid_loans_count' => $repaidLoans->count(),
+                'pending_repayments_total' => round($pendingRepayments, 2),
+                'active_loans' => $activeLoans->map->only(['id', 'amount_approved', 'monthly_installment', 'repayment_start_date', 'status']),
+                'pending_loans' => $pendingLoans->map->only(['id', 'amount_requested', 'status']),
+                'repaid_loans' => $repaidLoans->map->only(['id', 'amount_approved', 'status']),
+            ],
+        ];
+    }
+
+    /**
+     * Get financial summary for the company or filtered by department/employee/year/month
+     */
+    public function getCompanyFinancialSummary(array $filters = []): array
+    {
+        $query = Payroll::query()->with('employee');
+
+        if (!empty($filters['department_id'])) {
+            $query->whereHas('employee', function ($q) use ($filters) {
+                $q->where('department_id', $filters['department_id']);
+            });
+        }
+
+        if (!empty($filters['employee_id'])) {
+            $query->where('employee_id', $filters['employee_id']);
+        }
+
+        if (!empty($filters['year'])) {
+            $query->whereYear('period', $filters['year']);
+        }
+
+        if (!empty($filters['month'])) {
+            $query->whereMonth('period', $filters['month']);
+        }
+
+        $payrolls = $query->get();
+
+        $totalGross = $payrolls->sum('gross_salary');
+        $totalBenefits = $payrolls->sum('total_benefits');
+        $totalDeductions = $payrolls->sum('total_deductions');
+        $netSalary = $payrolls->sum('net_pay');
+
+        $employeeIds = $payrolls->pluck('employee_id')->unique();
+
+        $allLoans = \App\Models\EmployeeLoan::whereIn('employee_id', $employeeIds)->get();
+        $activeLoans = $allLoans->where('status', 'in_repayment');
+        $pendingLoans = $allLoans->where('status', 'pending');
+        $repaidLoans = $allLoans->where('status', 'paid');
+        $pendingRepayments = $activeLoans->sum('monthly_installment');
+
+        return [
+            'gross_salary_total' => round($totalGross, 2),
+            'total_benefits' => round($totalBenefits, 2),
+            'total_deductions' => round($totalDeductions, 2),
+            'net_salary_total' => round($netSalary, 2),
+            'loan_summary' => [
+                'total_loans' => $allLoans->count(),
+                'active_loans_count' => $activeLoans->count(),
+                'pending_loans_count' => $pendingLoans->count(),
+                'repaid_loans_count' => $repaidLoans->count(),
+                'pending_repayments_total' => round($pendingRepayments, 2),
+                'active_loans' => $activeLoans->map->only(['id', 'amount_approved', 'monthly_installment', 'repayment_start_date', 'status']),
+                'pending_loans' => $pendingLoans->map->only(['id', 'amount_requested', 'status']),
+                'repaid_loans' => $repaidLoans->map->only(['id', 'amount_approved', 'status']),
+            ],
+        ];
+    }
 }
