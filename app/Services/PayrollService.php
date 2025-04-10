@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class PayrollService
 {
@@ -170,7 +171,7 @@ class PayrollService
                 try {
                     $this->generatePayrollForEmployee($employee, $period);
                 } catch (\Exception $e) {
-                    \Log::error("Failed to generate payroll for employee {$employee->id}: " . $e->getMessage());
+                    Log::error("Failed to generate payroll for employee {$employee->id}: " . $e->getMessage());
                     // Continue with next employee instead of aborting the entire process
                 }
             }
@@ -343,7 +344,7 @@ class PayrollService
         ]);
 
         // Log payroll data for debugging
-        \Log::info('Payroll Data:', [
+        Log::info('Payroll Data:', [
             'id' => $payroll->id,
             'employee_id' => $payroll->employee_id,
             'period' => $payroll->period,
@@ -356,21 +357,21 @@ class PayrollService
 
         // Check if employee relationship is loaded
         if (!$payroll->employee) {
-            \Log::error('Employee relationship not loaded for payroll ID: ' . $payroll->id);
+            Log::error('Employee relationship not loaded for payroll ID: ' . $payroll->id);
             throw new \Exception("Employee data not found for payroll");
         }
 
         // FIX: Ensure net_salary and net_pay are consistent and never zero
         // If one has value and the other doesn't, use the available value
         if (($payroll->net_salary <= 0 || $payroll->net_salary === null) && $payroll->net_pay > 0) {
-            \Log::warning('Fixing net_salary with net_pay value for payroll ID: ' . $payroll->id);
+            Log::warning('Fixing net_salary with net_pay value for payroll ID: ' . $payroll->id);
             // Update the database record as well as the loaded model
             $payroll->net_salary = $payroll->net_pay;
             $payroll->save(['net_salary']);
         }
 
         if (($payroll->net_pay <= 0 || $payroll->net_pay === null) && $payroll->net_salary > 0) {
-            \Log::warning('Fixing net_pay with net_salary value for payroll ID: ' . $payroll->id);
+            Log::warning('Fixing net_pay with net_salary value for payroll ID: ' . $payroll->id);
             // Update the database record as well as the loaded model
             $payroll->net_pay = $payroll->net_salary;
             $payroll->save(['net_pay']);
@@ -378,18 +379,18 @@ class PayrollService
 
         // Initialize empty collections for benefits and deductions if they're null
         if (!$payroll->payrollBenefits) {
-            \Log::warning('payrollBenefits relation is null, creating empty collection');
+            Log::warning('payrollBenefits relation is null, creating empty collection');
             $payroll->setRelation('payrollBenefits', collect([]));
         }
 
         if (!$payroll->payrollDeductions) {
-            \Log::warning('payrollDeductions relation is null, creating empty collection');
+            Log::warning('payrollDeductions relation is null, creating empty collection');
             $payroll->setRelation('payrollDeductions', collect([]));
         }
 
         // Warn about zero gross salary
         if ($payroll->gross_salary <= 0) {
-            \Log::warning('Gross salary is zero or negative: ' . $payroll->gross_salary);
+            Log::warning('Gross salary is zero or negative: ' . $payroll->gross_salary);
         }
 
         // Get department name with fallback
@@ -433,7 +434,7 @@ class PayrollService
                 throw new \Exception("Failed to create PDF file at: $pdfPath");
             }
 
-            \Log::info('PDF generated successfully at: ' . $pdfPath);
+            Log::info('PDF generated successfully at: ' . $pdfPath);
 
             // Return the file for download
             return response()->download($pdfPath, $filename, [
@@ -441,8 +442,8 @@ class PayrollService
             ])->deleteFileAfterSend(true);
         } catch (\Exception $e) {
             // Log any errors that occur
-            \Log::error('PDF generation failed: ' . $e->getMessage());
-            \Log::error($e->getTraceAsString());
+            Log::error('PDF generation failed: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             throw $e;
         }
     }
@@ -526,7 +527,7 @@ class PayrollService
                 $files[] = $pdfPath;
 
             } catch (\Exception $e) {
-                \Log::error('Failed to generate payslip for employee ID: ' . $payroll->employee_id . ': ' . $e->getMessage());
+                Log::error('Failed to generate payslip for employee ID: ' . $payroll->employee_id . ': ' . $e->getMessage());
             }
         }
 
