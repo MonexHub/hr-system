@@ -7,21 +7,26 @@ use Illuminate\Database\Eloquent\Model;
 class Deduction extends Model
 {
     protected $fillable = [
+        'payroll_id',
+        'deduction_id',
         'name',
-        'code',
-        'description',
-        'applies_to_all',
         'type',
         'value',
+        'amount',
     ];
 
     protected $casts = [
-        'applies_to_all' => 'boolean',
         'value' => 'decimal:2',
+        'amount' => 'decimal:2',
     ];
 
-    public function employeeDeductions()
+    public function payroll()
     {
-        return $this->hasMany(EmployeeDeduction::class);
+        return $this->belongsTo(Payroll::class);
+    }
+
+    public function deduction()
+    {
+        return $this->belongsTo(Deduction::class);
     }
 }

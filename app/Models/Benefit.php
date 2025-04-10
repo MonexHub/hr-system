@@ -7,21 +7,26 @@ use Illuminate\Database\Eloquent\Model;
 class Benefit extends Model
 {
     protected $fillable = [
+        'payroll_id',
+        'benefit_id',
         'name',
-        'code',
-        'description',
-        'applies_to_all',
         'type',
         'value',
+        'amount',
     ];
 
     protected $casts = [
-        'applies_to_all' => 'boolean',
         'value' => 'decimal:2',
+        'amount' => 'decimal:2',
     ];
 
-    public function employeeBenefits()
+    public function payroll()
     {
-        return $this->hasMany(EmployeeBenefit::class);
+        return $this->belongsTo(Payroll::class);
+    }
+
+    public function benefit()
+    {
+        return $this->belongsTo(Benefit::class);
     }
 }

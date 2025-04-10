@@ -243,6 +243,21 @@ class Employee extends Model
         return $this->hasMany(EmployeeDocument::class);
     }
 
+    public function employeeBenefits(): HasMany
+    {
+        return $this->hasMany(EmployeeBenefit::class);
+    }
+
+    public function employeeDeductions(): HasMany
+    {
+        return $this->hasMany(EmployeeDeduction::class);
+    }
+
+    public function employeeLoans(): HasMany
+    {
+        return $this->hasMany(EmployeeLoan::class);
+    }
+
 
     public function financials()
     {
@@ -686,6 +701,8 @@ class Employee extends Model
     {
         return $this->email;
     }
+
+
 
     public function scopeOnProbation($query)
     {

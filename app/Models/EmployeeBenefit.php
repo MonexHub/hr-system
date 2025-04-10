@@ -28,4 +28,9 @@ class EmployeeBenefit extends Model
     {
         return $this->belongsTo(Benefit::class);
     }
+
+    public function scopeActive($query)
+    {
+        return $query->where('active', true);
+    }
 }
