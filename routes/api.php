@@ -16,7 +16,31 @@ use App\Http\Controllers\Api\ZkbiotimeController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+Route::prefix('zkbiotime')->group(function () {
+    // List all employees
+    Route::get('/employees', [ZkbiotimeController::class, 'index']);
 
+    // Get a specific employee
+    Route::get('/employees/{id}', [ZkbiotimeController::class, 'show']);
+
+    // Create a new employee
+    Route::post('/employees', [ZkbiotimeController::class, 'store']);
+
+    // Update an employee
+    Route::put('/employees/{id}', [ZkbiotimeController::class, 'update']);
+
+    // Delete an employee
+    Route::delete('/employees/{id}', [ZkbiotimeController::class, 'destroy']);
+
+
+    Route::prefix('attendance')->controller(ZkbiotimeController::class)->group(function () {
+        Route::get('/time-card-report', 'timeCardReport');
+        Route::get('/monthly-punch-report', 'monthlyPunchReport');
+        Route::get('/attendance-summary', 'attendanceSummary');
+        Route::get('/daily-time-card-report', 'dailyTimeCardReport');
+        Route::get('/scheduled-punch-report', 'scheduledPunchReport');
+    });
+});
 
 
 Route::prefix('auth')->group(function () {
@@ -26,31 +50,7 @@ Route::prefix('auth')->group(function () {
 
 Route::middleware(['auth:api'])->group(function () {
 
-    Route::prefix('zkbiotime')->group(function () {
-        // List all employees
-        Route::get('/employees', [ZkbiotimeController::class, 'index']);
 
-        // Get a specific employee
-        Route::get('/employees/{id}', [ZkbiotimeController::class, 'show']);
-
-        // Create a new employee
-        Route::post('/employees', [ZkbiotimeController::class, 'store']);
-
-        // Update an employee
-        Route::put('/employees/{id}', [ZkbiotimeController::class, 'update']);
-
-        // Delete an employee
-        Route::delete('/employees/{id}', [ZkbiotimeController::class, 'destroy']);
-
-
-        Route::prefix('attendance')->controller(ZkbiotimeController::class)->group(function () {
-            Route::get('/time-card-report', 'timeCardReport');
-            Route::get('/monthly-punch-report', 'monthlyPunchReport');
-            Route::get('/attendance-summary', 'attendanceSummary');
-            Route::get('/daily-time-card-report', 'dailyTimeCardReport');
-            Route::get('/scheduled-punch-report', 'scheduledPunchReport');
-        });
-    });
 
     Route::prefix('jobs')->group(function () {
         // Create a job post

@@ -14,24 +14,24 @@ class ZKBiotimeService
     protected string|null $authToken = null;
 
     protected array $paycodeLabels = [
-        'paycode_1' => 'Regular(H)',
-        'paycode_2' => 'Late In(M)',
-        'paycode_3' => 'Early Out(M)',
-        'paycode_4' => 'Absence(H)',
-        'paycode_5' => 'Normal OT(H)',
-        'paycode_6' => 'Weekend OT(H)',
-        'paycode_7' => 'Holiday OT(H)',
-        'paycode_8' => 'OT1(H)',
-        'paycode_9' => 'OT2(H)',
-        'paycode_10' => 'OT3(H)',
-        'paycode_11' => 'Annual Leave(H)',
-        'paycode_12' => 'Sick Leave(H)',
-        'paycode_13' => 'Casual Leave(H)',
-        'paycode_14' => 'Maternity Leave(H)',
-        'paycode_15' => 'Compassionate Leave(H)',
-        'paycode_16' => 'Business Trip(H)',
-        'paycode_17' => 'Compensatory(H)',
-        'paycode_18' => 'Compensatory Leave(H)',
+        'paycode_1' => 'regular_hours',
+        'paycode_2' => 'minutes_late',
+        'paycode_3' => 'early_timeout',
+        'paycode_4' => 'absent_hours',
+        'paycode_5' => 'normal_overtime_hours',
+        'paycode_6' => 'weekend_overtime_hours',
+        'paycode_7' => 'holiday_overtime_hours',
+        'paycode_8' => 'overtime_1',
+        'paycode_9' => 'overtime_2',
+        'paycode_10' => 'overtime_3',
+        'paycode_11' => 'annual_leave_hours',
+        'paycode_12' => 'sick_leave_hours',
+        'paycode_13' => 'casual_leave_hours',
+        'paycode_14' => 'maternity_leave_hours',
+        'paycode_15' => 'compensatory_leave_hours',
+        'paycode_16' => 'business_trip_hours',
+        'paycode_17' => 'compensatory_hours',
+        'paycode_18' => 'compensatory_leave_hours',
     ];
 
     public function __construct()
@@ -100,6 +100,20 @@ class ZKBiotimeService
         }
     }
 
+    protected function mapDailyKeys(array &$record, string $year, string $month): void
+    {
+        $days = [];
+        foreach ($record as $key => $value) {
+            if (preg_match('/^\d{4}$/', $key)) {
+                $day = intval(substr($key, 2, 2));
+                $formatted = sprintf('%s-%s-%02d', $year, $month, $day);
+                $days[$formatted] = $value;
+                unset($record[$key]);
+            }
+        }
+        $record['days'] = $days;
+    }
+
     public function getMonthlyPunchReport(array $params = [])
     {
         try {
@@ -115,16 +129,17 @@ class ZKBiotimeService
             $url = "{$this->baseUrl}/att/api/monthlyPunchReport/?$query";
             $response = Http::withHeaders($this->withAuthHeaders())->get($url)->json();
 
-            foreach ($response['data'] ?? [] as &$record) {
-                $record['days'] = [];
-                foreach ($record as $key => $value) {
-                    if (preg_match('/^\d{4}$/', $key)) {
-                        $record['days'][$key] = $value;
-                    }
-                }
+            $year = now()->format('Y');
+            $month = now()->format('m');
+
+            $modifiedData = [];
+            foreach ($response['data'] ?? [] as $record) {
+                $this->mapDailyKeys($record, $year, $month);
                 $this->mapPaycodes($record);
+                $modifiedData[] = $record;
             }
 
+            $response['data'] = $modifiedData;
             return $response;
         } catch (\Exception $e) {
             Log::error('Failed to fetch monthly punch report', ['error' => $e->getMessage()]);
@@ -148,13 +163,16 @@ class ZKBiotimeService
 
             $response = Http::withHeaders($this->withAuthHeaders())->get($url)->json();
 
-            foreach ($response['data'] ?? [] as &$record) {
+            $modifiedData = [];
+            foreach ($response['data'] ?? [] as $record) {
                 $punches = explode(',', $record['punch_set'] ?? '');
                 $record['check_in'] = $punches[0] ?? null;
                 $record['check_out'] = count($punches) > 1 ? end($punches) : null;
                 $this->mapPaycodes($record);
+                $modifiedData[] = $record;
             }
 
+            $response['data'] = $modifiedData;
             return $response;
         } catch (\Exception $e) {
             Log::error('Failed to fetch time card report', ['error' => $e->getMessage()]);
@@ -211,7 +229,15 @@ class ZKBiotimeService
 
             $url = "{$this->baseUrl}/att/api/empSummaryReport/?$query";
 
-            return Http::withHeaders($this->withAuthHeaders())->get($url)->json();
+            $response = Http::withHeaders($this->withAuthHeaders())->get($url)->json();
+            $modifiedData = [];
+            foreach ($response['data'] ?? [] as $record) {
+                $this->mapPaycodes($record);
+                $this->mapDailyKeys($record, now()->format('Y'), now()->format('m'));
+                $modifiedData[] = $record;
+            }
+            $response['data'] = $modifiedData;
+            return $response;
         } catch (\Exception $e) {
             Log::error('Failed to fetch attendance summary', ['error' => $e->getMessage()]);
             return null;
