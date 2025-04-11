@@ -12,7 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payees', function (Blueprint $table) {
-            // Add the missing description column
+            // Adding a new column 'description' to the 'payees' table
+            
             $table->text('description')->nullable()->after('fixed_amount');
         });
     }
