@@ -37,6 +37,12 @@ return [
         'sender_name' => env('BEEM_SENDER_NAME', 'Company'),
     ],
 
+    'biotime' => [
+    'base_url' => env('BIOTIME_URL', 'http://your-server-ip:8097'),
+    'username' => env('BIOTIME_USER'),
+    'password' => env('BIOTIME_PASS'),
+],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
