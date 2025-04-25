@@ -401,7 +401,7 @@ class ZKBiotimeService
         $response = $this->createEmployee($payload);
 
         if (isset($response['id'])) {
-            $employee->biotime_employee_id = $employee->employee_code;
+            $employee->external_employee_id = $employee->employee_code;
             $employee->save();
             return true;
         } else {
@@ -418,8 +418,8 @@ class ZKBiotimeService
      */
     public function updateEmployeeFromModel(Employee $employee): bool
     {
-        if (!$employee->biotime_employee_id) {
-            Log::error('Cannot update employee in Biotime: missing biotime_employee_id', [
+        if (!$employee->external_employee_id) {
+            Log::error('Cannot update employee in Biotime: missing external_employee_id', [
                 'employee_id' => $employee->id
             ]);
             return false;
@@ -448,7 +448,7 @@ class ZKBiotimeService
             'active_status' => 1,
         ];
 
-        $response = $this->updateEmployee($employee->biotime_employee_id, $payload);
+        $response = $this->updateEmployee($employee->external_employee_id, $payload);
 
         if (isset($response['id'])) {
             return true;
@@ -466,14 +466,14 @@ class ZKBiotimeService
      */
     public function deleteEmployeeFromModel(Employee $employee): bool
     {
-        if (!$employee->biotime_employee_id) {
-            Log::error('Cannot delete employee in Biotime: missing biotime_employee_id', [
+        if (!$employee->external_employee_id) {
+            Log::error('Cannot delete employee in Biotime: missing external_employee_id', [
                 'employee_id' => $employee->id
             ]);
             return false;
         }
 
-        $response = $this->deleteEmployee($employee->biotime_employee_id);
+        $response = $this->deleteEmployee($employee->external_employee_id);
 
         if (isset($response['id']) || ($response['status'] ?? '') === 'success') {
             return true;
