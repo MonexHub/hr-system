@@ -56,6 +56,7 @@ class Employee extends Model
         'net_salary',
         'salary',
         'reporting_to',
+        'external_employee_id'
     ];
 
     protected $casts = [

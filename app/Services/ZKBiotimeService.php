@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\Department;
+use App\Models\Employee;
 
 class ZKBiotimeService
 {
@@ -367,5 +368,133 @@ class ZKBiotimeService
         } while (isset($response['next'])); // Continue until no more pages
 
         return $allEmployees;
+    }
+    /**
+     * Create an employee in BioTime based on local Employee model
+     */
+    public function createEmployeeFromModel(Employee $employee): bool
+    {
+
+        //load the employee from the database with all relations
+        $employee = Employee::with(['department', 'jobTitle'])->find($employee->id);
+        if (!$employee) {
+            Log::error('Cannot create employee in Biotime: employee not found', [
+                'employee_id' => $employee->id
+            ]);
+            return false;
+        }
+        $payload = [
+            'emp_code' => $employee->employee_code, // Use system employee_code as biotime emp_code
+            'first_name' => $employee->first_name,
+            'last_name' => $employee->last_name,
+            'email' => $employee->email,
+            'gender' => $this->mapGender($employee->gender),
+            'birthday' => optional($employee->birthdate)->format('Y-m-d'),
+            'hire_date' => optional($employee->appointment_date)->format('Y-m-d'),
+            'department' => [$employee->department_id],
+            'position' => $employee->jobTitle?->name,
+            'area' => "SIMBA HQ", // Default area ID
+            'area_code'=>2,
+            'active_status' => 1,
+        ];
+
+        $response = $this->createEmployee($payload);
+
+        if (isset($response['id'])) {
+            $employee->biotime_employee_id = $employee->employee_code;
+            $employee->save();
+            return true;
+        } else {
+            Log::error('Failed to create employee in Biotime', [
+                'employee_id' => $employee->id,
+                'response' => $response
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Update an employee in BioTime based on local Employee model
+     */
+    public function updateEmployeeFromModel(Employee $employee): bool
+    {
+        if (!$employee->biotime_employee_id) {
+            Log::error('Cannot update employee in Biotime: missing biotime_employee_id', [
+                'employee_id' => $employee->id
+            ]);
+            return false;
+        }
+
+        //load the employee from the database with all relations
+        $employee = Employee::with(['department', 'jobTitle'])->find($employee->id);
+        if (!$employee) {
+            Log::error('Cannot create employee in Biotime: employee not found', [
+                'employee_id' => $employee->id
+            ]);
+            return false;
+        }
+        $payload = [
+            'emp_code' => $employee->employee_code, // Use system employee_code as biotime emp_code
+            'first_name' => $employee->first_name,
+            'last_name' => $employee->last_name,
+            'email' => $employee->email,
+            'gender' => $this->mapGender($employee->gender),
+            'birthday' => optional($employee->birthdate)->format('Y-m-d'),
+            'hire_date' => optional($employee->appointment_date)->format('Y-m-d'),
+            'department' => [$employee->department_id],
+            'position' => $employee->jobTitle?->name,
+            'area' => "SIMBA HQ", // Default area ID
+            'area_code'=>2,
+            'active_status' => 1,
+        ];
+
+        $response = $this->updateEmployee($employee->biotime_employee_id, $payload);
+
+        if (isset($response['id'])) {
+            return true;
+        } else {
+            Log::error('Failed to update employee in Biotime', [
+                'employee_id' => $employee->id,
+                'response' => $response
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Delete an employee in BioTime based on local Employee model
+     */
+    public function deleteEmployeeFromModel(Employee $employee): bool
+    {
+        if (!$employee->biotime_employee_id) {
+            Log::error('Cannot delete employee in Biotime: missing biotime_employee_id', [
+                'employee_id' => $employee->id
+            ]);
+            return false;
+        }
+
+        $response = $this->deleteEmployee($employee->biotime_employee_id);
+
+        if (isset($response['id']) || ($response['status'] ?? '') === 'success') {
+            return true;
+        } else {
+            Log::error('Failed to delete employee in Biotime', [
+                'employee_id' => $employee->id,
+                'response' => $response
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Helper method to map gender to Biotime format
+     */
+    protected function mapGender(?string $gender): ?string
+    {
+        return match (strtolower($gender)) {
+            'male', 'm' => 'M',
+            'female', 'f' => 'F',
+            default => null,
+        };
     }
 }
