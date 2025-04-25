@@ -92,11 +92,25 @@ class ZKBiotimeService
 
     protected function mapPaycodes(array &$record): void
     {
+        // Map department/position codes if they exist under different keys
+        $record['dept_code'] = $record['dept_code'] ?? $record['department_id'] ?? null;
+        $record['position_code'] = $record['position_code'] ?? $record['pos_code'] ?? null;
+
+        // Process paycode labels
         foreach ($this->paycodeLabels as $code => $label) {
             if (array_key_exists($code, $record)) {
-                $record[$label] = $record[$code];
+                // Avoid overwriting existing data
+                if (!array_key_exists($label, $record)) {
+                    $record[$label] = $record[$code];
+                }
                 unset($record[$code]);
             }
+        }
+
+        // Log unmapped paycodes for debugging
+        $unmapped = array_diff_key($record, array_flip($this->paycodeLabels));
+        if (!empty($unmapped)) {
+            Log::debug('Unmapped keys in API record', $unmapped);
         }
     }
 
@@ -129,20 +143,56 @@ class ZKBiotimeService
             $url = "{$this->baseUrl}/att/api/monthlyPunchReport/?$query";
             $response = Http::withHeaders($this->withAuthHeaders())->get($url)->json();
 
-            $year = now()->format('Y');
-            $month = now()->format('m');
-
-            $modifiedData = [];
-            foreach ($response['data'] ?? [] as $record) {
-                $this->mapDailyKeys($record, $year, $month);
-                $this->mapPaycodes($record);
-                $modifiedData[] = $record;
+            // Check if the response matches the expected format
+            if (!isset($response['data'])) {
+                Log::error('API response format does not contain data field', ['response' => $response]);
+                return null;
             }
 
-            $response['data'] = $modifiedData;
-            return $response;
+            // Extract the year and month from the start date
+            $startDate = $params['start_date'] ?? now()->startOfMonth()->format('Y-m-d');
+            $year = substr($startDate, 0, 4);
+            $month = substr($startDate, 5, 2);
+
+            // Fix for nested data array structure
+            $employeeData = $response['data'];
+
+            // If the data field is directly an array of employees, not nested in a 'data' field
+            if (isset($employeeData[0]) && !isset($employeeData['data'])) {
+                $modifiedData = [];
+                foreach ($employeeData as $record) {
+                    $this->mapDailyKeys($record, $year, $month);
+                    $this->mapPaycodes($record);
+                    $modifiedData[] = $record;
+                }
+
+                // Create a proper response structure
+                return [
+                    'status' => 'success',
+                    'message' => 'Monthly punch report processed',
+                    'data' => [
+                        'count' => count($modifiedData),
+                        'next' => $response['next'] ?? null,
+                        'previous' => $response['previous'] ?? null,
+                        'msg' => $response['msg'] ?? '',
+                        'code' => $response['code'] ?? 0,
+                        'data' => $modifiedData
+                    ]
+                ];
+            } else {
+                // Original handling for nested data.data structure
+                $modifiedData = [];
+                foreach ($response['data']['data'] ?? [] as $record) {
+                    $this->mapDailyKeys($record, $year, $month);
+                    $this->mapPaycodes($record);
+                    $modifiedData[] = $record;
+                }
+
+                $response['data']['data'] = $modifiedData;
+                return $response;
+            }
         } catch (\Exception $e) {
-            Log::error('Failed to fetch monthly punch report', ['error' => $e->getMessage()]);
+            Log::error('Failed to fetch monthly punch report', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return null;
         }
     }
@@ -180,12 +230,26 @@ class ZKBiotimeService
         }
     }
 
-    public function getEmployees(array $filters = [])
-    {
-        $query = http_build_query($filters);
-        $url = "{$this->baseUrl}/personnel/api/employees/?$query";
 
-        return Http::withHeaders($this->withAuthHeaders())->get($url)->json();
+    public function getEmployees(array $filters = []): array
+    {
+        try {
+            $query = http_build_query($filters);
+            $url = "{$this->baseUrl}/personnel/api/employees/?$query";
+
+            $response = Http::withHeaders($this->withAuthHeaders())
+                ->get($url)
+                ->json();
+
+            return [
+                'data' => $response['data'] ?? [],
+                'next' => $response['next'] ?? null
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch employees', ['error' => $e->getMessage()]);
+            return ['data' => [], 'next' => null];
+        }
     }
 
     public function getEmployee(int $id)
@@ -285,5 +349,23 @@ class ZKBiotimeService
             Log::error('Failed to fetch scheduled punch report', ['error' => $e->getMessage()]);
             return null;
         }
+    }
+
+    public function fetchAllEmployees(): array
+    {
+        $allEmployees = [];
+        $page = 1;
+
+        do {
+            $response = $this->getEmployees(['page' => $page, 'page_size' => 100]);
+
+            if (empty($response['data'])) break;
+
+            $allEmployees = array_merge($allEmployees, $response['data']);
+            $page++;
+
+        } while (isset($response['next'])); // Continue until no more pages
+
+        return $allEmployees;
     }
 }

@@ -184,13 +184,6 @@ Route::middleware(['auth:api'])->group(function () {
         Route::delete('/{id}', [AnnouncementController::class, 'destroy']);
     });
 
-
-
-
-
-
-
-
     //Attendance Routes
     Route::get('/attendance', [AttendanceController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'getAttendance']);
@@ -200,9 +193,6 @@ Route::middleware(['auth:api'])->group(function () {
     //Organization Routes
     Route::get('/departments', [OrganizationController::class, 'departments']);
     Route::get('/jobtitles', [OrganizationController::class, 'jobTitles']);
-
-
-
     //Notification Preferences
     Route::resource('notification-preferences', NotificationPreferenceController::class);
 });

@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('payees', function (Blueprint $table) {
             // Adding a new column 'description' to the 'payees' table
-            
+
             $table->text('description')->nullable()->after('fixed_amount');
         });
     }

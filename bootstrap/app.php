@@ -3,6 +3,7 @@
 use App\Mail\WeeklyContractStatusReport;
 use App\Models\Employee;
 use App\Models\Holiday;
+use App\Jobs\FetchAttendanceJob;
 use App\Notifications\BirthdayReminderNotification;
 use App\Notifications\EmployeeContractStatusNotification;
 use App\Notifications\HolidayReminderNotification;
@@ -164,16 +165,54 @@ return Application::configure(basePath: dirname(__DIR__))
         })
             ->name('cleanup-notification-logs')
             ->daily();
+
+        // ATTENDANCE FETCH JOBS
+        // 6. Fetch today's attendance data every hour during working hours
+        // 6. Fetch today's attendance data every hour during working hours
+        $schedule->job(new FetchAttendanceJob(
+            now()->format('Y-m-d'), // Start date (today)
+            now()->format('Y-m-d'), // End date (today)
+            null // All departments
+        ))
+            // Use withoutOverlapping instead of name to prevent overlapping jobs
+            ->withoutOverlapping()
+            ->description('Fetch today\'s attendance data') // Use description instead of name
+            ->hourly()
+            ->between('8:00', '18:00')
+            ->weekdays()
+            ->timezone('Africa/Dar_es_Salaam');
+
+// 7. Fetch yesterday's complete attendance data at midnight
+        $schedule->job(new FetchAttendanceJob(
+            now()->subDay()->format('Y-m-d'), // Start date (yesterday)
+            now()->subDay()->format('Y-m-d'), // End date (yesterday)
+            null // All departments
+        ))
+            ->withoutOverlapping()
+            ->description('Fetch yesterday\'s attendance data')
+            ->dailyAt('00:05')
+            ->timezone('Africa/Dar_es_Salaam');
+
+// 8. Fetch complete monthly data on the 1st of each month for previous month
+        $schedule->job(new FetchAttendanceJob(
+            now()->subMonth()->startOfMonth()->format('Y-m-d'), // Start date (first day of previous month)
+            now()->subMonth()->endOfMonth()->format('Y-m-d'), // End date (last day of previous month)
+            null // All departments
+        ))
+            ->withoutOverlapping()
+            ->description('Fetch monthly attendance data')
+            ->monthlyOn(1, '01:00')
+            ->timezone('Africa/Dar_es_Salaam');
     })
     ->withExceptions(function (Exceptions $exceptions) {
-     try {
-        $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e) {
-            // Render JSON for API routes or when the request expects JSON
-            return Str::startsWith($request->path(), 'api/') || $request->expectsJson();
-        });
-     } catch (\Throwable $th) {
+        try {
+            $exceptions->shouldRenderJsonWhen(function (Request $request, \Throwable $e) {
+                // Render JSON for API routes or when the request expects JSON
+                return Str::startsWith($request->path(), 'api/') || $request->expectsJson();
+            });
+        } catch (\Throwable $th) {
             //throw $th;
-     }
+        }
     })
     ->create();
 
