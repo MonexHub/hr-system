@@ -384,7 +384,7 @@ class ZKBiotimeService
             return false;
         }
         $payload = [
-            'emp_code' => $employee->employee_code, // Use system employee_code as biotime emp_code
+            'emp_code' => $employee->employee_code,
             'first_name' => $employee->first_name,
             'last_name' => $employee->last_name,
             'email' => $employee->email,

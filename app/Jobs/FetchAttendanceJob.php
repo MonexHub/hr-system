@@ -3,7 +3,9 @@
 namespace App\Jobs;
 
 use App\Models\Attendance;
+use App\Models\Department;
 use App\Models\Employee;
+use App\Models\JobTitle;
 use App\Services\ZKBiotimeService;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
@@ -168,7 +170,7 @@ class FetchAttendanceJob implements ShouldQueue
                 }
 
                 // Find the employee by employee_code
-                $employee = Employee::where('employee_code', $employeeCode)->first();
+                $employee = Employee::where('external_employee_id', $employeeCode)->first();
                 // If employee not found, try to create a new one
                 if (!$employee) {
                     $employee = $this->createEmployeeFromRecord($record);
@@ -222,33 +224,65 @@ class FetchAttendanceJob implements ShouldQueue
      * @param array $record
      * @return Employee|null
      */
+
     protected function createEmployeeFromRecord(array $record): ?Employee
     {
         try {
-            Log::info('Creating new employee record', [
-                'emp_code' => $record['emp_code']
-            ]);
+            // Find or create department by name
+            $department = Department::firstOrCreate(
+                ['name' => $record['dept_name']],
+                ['description' => 'Auto-created from API']
+            );
 
-            return Employee::create([
+            // Find or create job title by name within department
+            $jobTitle = JobTitle::firstOrCreate(
+                [
+                    'name' => $record['position_name'],
+                    'department_id' => $department->id
+                ],
+                [
+                    'description' => 'Auto-created from API',
+                    'is_active' => true,
+                    'net_salary_min' => 0,
+                    'net_salary_max' => 0
+                ]
+            );
+
+            $employeeData = [
                 'employee_code' => $record['emp_code'],
+                'external_employee_id' => $record['emp_code'],
+                'original_employee_code' => $record['emp_code'],
                 'first_name' => $record['first_name'] ?? '',
                 'last_name' => $record['last_name'] ?? '',
-                'gender' => strtolower($record['gender'] ?? 'M'),
-                'department_id' => $record['dept_code'] ?? null,
-                'job_title_id' => $record['position_code'] ?? null,
-                'birthdate' => '1970-01-01', // Default value
-                'email' => null, // Not provided in the API data
-                'phone_number' => null, // Not provided in the API data
-                'appointment_date' => now(), // Default value
-                'employment_status' => 'active', // Default value
-            ]);
+                'gender' => $this->mapGender($record['gender'] ?? null),
+                'department_id' => $department->id,
+                'job_title_id' => $jobTitle->id,
+                'employment_status' => 'active',
+                'contract_type' => 'permanent',
+                'appointment_date' => now(),
+                // Add other required fields with defaults
+                'birthdate' => '1970-01-01',
+                'salary' => 0,
+                'branch' => 'unassigned'
+            ];
+
+            return Employee::create($employeeData);
         } catch (\Exception $e) {
-            Log::error('Failed to create employee from record', [
-                'record' => $record,
-                'error' => $e->getMessage()
+            Log::error('Failed to create employee', [
+                'error' => $e->getMessage(),
+                'record' => $record
             ]);
             return null;
         }
+    }
+
+    private function mapGender(?string $gender): string
+    {
+        return match (strtoupper($gender)) {
+            'M' => 'male',
+            'F' => 'female',
+            default => 'other',
+        };
     }
 
     /**
