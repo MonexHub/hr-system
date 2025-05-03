@@ -182,10 +182,6 @@ class FetchAttendanceJob implements ShouldQueue
                 // Find the employee by external_employee_id
                 $employee = Employee::where('external_employee_id', $employeeCode)->first();
 
-                // If not found, try original_employee_code
-                if (!$employee) {
-                    $employee = Employee::where('original_employee_code', $employeeCode)->first();
-                }
 
                 // Log database query for debugging
                 if (!$employee) {
@@ -194,8 +190,7 @@ class FetchAttendanceJob implements ShouldQueue
                     // Get a list of all employees with similar codes for debugging
                     $similarEmployees = Employee::where('employee_code', 'like', '%' . substr($employeeCode, -5) . '%')
                         ->orWhere('external_employee_id', 'like', '%' . substr($employeeCode, -5) . '%')
-                        ->orWhere('original_employee_code', 'like', '%' . substr($employeeCode, -5) . '%')
-                        ->select('id', 'employee_code', 'external_employee_id', 'original_employee_code')
+                        ->select('id', 'employee_code', 'external_employee_id')
                         ->get();
 
                     Log::warning('Employee not found', [
@@ -306,7 +301,6 @@ class FetchAttendanceJob implements ShouldQueue
             $employeeData = [
                 'employee_code' => $record['emp_code'],
                 'external_employee_id' => $record['emp_code'],
-                'original_employee_code' => $record['emp_code'],
                 'first_name' => $record['first_name'] ?? '',
                 'last_name' => $record['last_name'] ?? '',
                 'gender' => $this->mapGender($record['gender'] ?? null),
