@@ -375,7 +375,7 @@ class FetchAttendanceJob implements ShouldQueue
             }
 
             // Calculate metrics more explicitly
-            $totalMinutes = $checkOutDateTime->diffInMinutes($checkInDateTime);
+            $totalMinutes = $checkOutDateTime->diffInMinutes($checkInDateTime,true);
             $totalHours = $totalMinutes / 60;
 
             Log::debug('Calculated attendance metrics', [
@@ -402,23 +402,24 @@ class FetchAttendanceJob implements ShouldQueue
                         'overtime_hours' => (float)(($record['normal_overtime_hours'] ?? 0) +
                             ($record['weekend_overtime_hours'] ?? 0) +
                             ($record['holiday_overtime_hours'] ?? 0)),
-                        'late_minutes' => (float)($record['minutes_late'] ?? 0),
-                        'early_out_minutes' => (float)($record['early_timeout'] ?? 0),
-                        'absence_hours' => (float)($record['absent_hours'] ?? 0),
-                        'normal_overtime_hours' => (float)($record['normal_overtime_hours'] ?? 0),
-                        'weekend_overtime_hours' => (float)($record['weekend_overtime_hours'] ?? 0),
-                        'holiday_overtime_hours' => (float)($record['holiday_overtime_hours'] ?? 0),
-                        'ot1_hours' => (float)($record['overtime_1'] ?? 0),
-                        'ot2_hours' => (float)($record['overtime_2'] ?? 0),
-                        'ot3_hours' => (float)($record['overtime_3'] ?? 0),
-                        'annual_leave_hours' => (float)($record['annual_leave_hours'] ?? 0),
-                        'sick_leave_hours' => (float)($record['sick_leave_hours'] ?? 0),
-                        'casual_leave_hours' => (float)($record['casual_leave_hours'] ?? 0),
-                        'maternity_leave_hours' => (float)($record['maternity_leave_hours'] ?? 0),
-                        'compassionate_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
-                        'business_trip_hours' => (float)($record['business_trip_hours'] ?? 0),
-                        'compensatory_hours' => (float)($record['compensatory_hours'] ?? 0),
-                        'compensatory_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
+                            'notes'=> "Employee was late for {$record['minutes_late']} minutes.". " Employee left early for {$record['early_timeout']} minutes.",
+                        // 'late_minutes' => (float)($record['minutes_late'] ?? 0),
+                        // 'early_out_minutes' => (float)($record['early_timeout'] ?? 0),
+                        // 'absence_hours' => (float)($record['absent_hours'] ?? 0),
+                        // 'normal_overtime_hours' => (float)($record['normal_overtime_hours'] ?? 0),
+                        // 'weekend_overtime_hours' => (float)($record['weekend_overtime_hours'] ?? 0),
+                        // 'holiday_overtime_hours' => (float)($record['holiday_overtime_hours'] ?? 0),
+                        // 'ot1_hours' => (float)($record['overtime_1'] ?? 0),
+                        // 'ot2_hours' => (float)($record['overtime_2'] ?? 0),
+                        // 'ot3_hours' => (float)($record['overtime_3'] ?? 0),
+                        // 'annual_leave_hours' => (float)($record['annual_leave_hours'] ?? 0),
+                        // 'sick_leave_hours' => (float)($record['sick_leave_hours'] ?? 0),
+                        // 'casual_leave_hours' => (float)($record['casual_leave_hours'] ?? 0),
+                        // 'maternity_leave_hours' => (float)($record['maternity_leave_hours'] ?? 0),
+                        // 'compassionate_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
+                        // 'business_trip_hours' => (float)($record['business_trip_hours'] ?? 0),
+                        // 'compensatory_hours' => (float)($record['compensatory_hours'] ?? 0),
+                        // 'compensatory_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
                         'status' => $this->determineStatus(
                             (float)($record['minutes_late'] ?? 0),
                             (float)($record['early_timeout'] ?? 0),
@@ -464,7 +465,7 @@ class FetchAttendanceJob implements ShouldQueue
             return 'absent';
         }
 
-        $totalHours = $checkOut->diffInMinutes($checkIn) / 60;
+        $totalHours = $checkOut->diffInMinutes($checkIn,true) / 60;
 
         if ($totalHours < 4) {
             return 'half_day';

@@ -41,7 +41,20 @@ class ListAttendances extends ListRecords
             Actions\Action::make('sync')
                 ->label('Sync Attendance')
                 ->icon('heroicon-o-arrow-path')
-                ->url('/admin/attendances/sync'),
+                ->action(function () {
+                    $job = new FetchAttendanceJob(
+                        now()->subDays(30)->format('Y-m-d'),
+                        now()->format('Y-m-d')
+                    );
+
+                    dispatch($job);
+
+                    Notification::make()
+                        ->title('Sync started')
+                        ->body('Today\'s attendance data is being synced in the background.')
+                        ->success()
+                        ->send();
+                }),
             Actions\Action::make('syncToday')
                 ->label('Sync Today\'s Attendance')
                 ->icon('heroicon-o-arrow-path')
