@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class FetchAttendanceJob implements ShouldQueue
@@ -54,7 +55,7 @@ class FetchAttendanceJob implements ShouldQueue
                 'start_date' => $this->startDate,
                 'end_date' => $this->endDate,
                 'departments' => $this->departments,
-                'page_size' => 100, // Fetch more records per page
+                'page_size' => 400, // Fetch more records per page
             ]);
 
             // Improved response validation
@@ -62,7 +63,6 @@ class FetchAttendanceJob implements ShouldQueue
                 Log::error('No response from API');
                 return;
             }
-
             // Extract the actual data array where employee records are
             $attendanceRecords = null;
 
@@ -159,6 +159,13 @@ class FetchAttendanceJob implements ShouldQueue
     {
         $processedCount = 0;
         $skippedCount = 0;
+        $employeeNotFoundCount = 0;
+        $emptyTimeEntryCount = 0;
+
+        // Log the first few records to inspect their structure
+        Log::info('Sample attendance records', [
+            'record_sample' => array_slice($attendanceRecords, 0, 2)
+        ]);
 
         foreach ($attendanceRecords as $record) {
             try {
@@ -166,35 +173,80 @@ class FetchAttendanceJob implements ShouldQueue
 
                 if (!$employeeCode) {
                     $skippedCount++;
+                    Log::warning('Missing emp_code in record', [
+                        'record_keys' => array_keys($record)
+                    ]);
                     continue;
                 }
 
-                // Find the employee by employee_code
+                // Find the employee by external_employee_id
                 $employee = Employee::where('external_employee_id', $employeeCode)->first();
-                // If employee not found, try to create a new one
+
+                // If not found, try original_employee_code
                 if (!$employee) {
-                    $employee = $this->createEmployeeFromRecord($record);
-                    if (!$employee) {
-                        $skippedCount++;
-                        continue;
-                    }
+                    $employee = Employee::where('original_employee_code', $employeeCode)->first();
+                }
+
+                // Log database query for debugging
+                if (!$employee) {
+                    $employeeNotFoundCount++;
+
+                    // Get a list of all employees with similar codes for debugging
+                    $similarEmployees = Employee::where('employee_code', 'like', '%' . substr($employeeCode, -5) . '%')
+                        ->orWhere('external_employee_id', 'like', '%' . substr($employeeCode, -5) . '%')
+                        ->orWhere('original_employee_code', 'like', '%' . substr($employeeCode, -5) . '%')
+                        ->select('id', 'employee_code', 'external_employee_id', 'original_employee_code')
+                        ->get();
+
+                    Log::warning('Employee not found', [
+                        'emp_code' => $employeeCode,
+                        'emp_name' => $record['first_name'] . ' ' . $record['last_name'],
+                        'dept_name' => $record['dept_name'] ?? 'N/A',
+                        'position' => $record['position_name'] ?? 'N/A',
+                        'similar_employees' => $similarEmployees,
+                        'all_api_keys' => array_keys($record)
+                    ]);
+
+                    $skippedCount++;
+                    continue;
                 }
 
                 $entriesProcessed = false;
+                $dayCount = count($record['days'] ?? []);
+                $emptyDayCount = 0;
 
                 // Process daily attendance records
                 foreach ($record['days'] as $date => $timeEntry) {
-                    // Skip empty time entries but log them for debugging
+                    // Skip empty time entries with JSON formatted log
                     if (empty($timeEntry)) {
-                        Log::debug('Skipping empty time entry', [
-                            'employee' => $employeeCode,
-                            'date' => $date
-                        ]);
+                        $emptyDayCount++;
+                        $emptyTimeEntryCount++;
+                        Log::debug(json_encode([
+                            'employee_id' => $employee->id,
+                            'employee_code' => $employee->employee_code,
+                            'external_id' => $employee->external_employee_id,
+                            'emp_code_from_api' => $employeeCode,
+                            'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                            'date' => $date,
+                            'department' => $record['dept_name'] ?? 'N/A',
+                            'position' => $record['position_name'] ?? 'N/A'
+                        ]));
                         continue;
                     }
 
                     $this->processAttendanceEntry($employee, $date, $timeEntry, $record);
                     $entriesProcessed = true;
+                }
+
+                // Log when all days are empty
+                if ($dayCount > 0 && $emptyDayCount === $dayCount) {
+                    Log::info('Employee has all empty time entries', [
+                        'employee_id' => $employee->id,
+                        'employee_code' => $employee->employee_code,
+                        'external_id' => $employee->external_employee_id,
+                        'name' => $employee->first_name . ' ' . $employee->last_name,
+                        'day_count' => $dayCount
+                    ]);
                 }
 
                 if ($entriesProcessed) {
@@ -205,8 +257,9 @@ class FetchAttendanceJob implements ShouldQueue
             } catch (\Exception $e) {
                 $skippedCount++;
                 Log::error('Error processing attendance record', [
-                    'record' => $record,
-                    'error' => $e->getMessage()
+                    'record' => json_encode($record),
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
                 ]);
             }
         }
@@ -214,6 +267,8 @@ class FetchAttendanceJob implements ShouldQueue
         Log::info('Attendance processing summary', [
             'processed' => $processedCount,
             'skipped' => $skippedCount,
+            'employee_not_found' => $employeeNotFoundCount,
+            'empty_time_entries' => $emptyTimeEntryCount,
             'total' => count($attendanceRecords)
         ]);
     }
@@ -339,7 +394,7 @@ class FetchAttendanceJob implements ShouldQueue
             ]);
 
             // Create or update attendance record in a transaction to prevent partial updates
-            \DB::transaction(function () use ($employee, $dateObj, $checkInDateTime, $checkOutDateTime, $totalHours, $record) {
+            DB::transaction(function () use ($employee, $dateObj, $checkInDateTime, $checkOutDateTime, $totalHours, $record) {
                 $attendance = Attendance::updateOrCreate(
                     [
                         'employee_id' => $employee->id,

@@ -87,7 +87,7 @@ class ZKBiotimeService
     protected function withDefaultPagination(array $params): array
     {
         $params['page'] = $params['page'] ?? 1;
-        $params['page_size'] = $params['page_size'] ?? 20;
+        $params['page_size'] = $params['page_size'] ?? 1000;
         return $params;
     }
 
