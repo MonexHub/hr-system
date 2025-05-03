@@ -138,7 +138,7 @@ class ZKBiotimeService
                 'end_date' => now()->format('Y-m-d'),
                 'areas' => -1,
                 'groups' => -1,
-                'employees' => -1,
+                'employees' => $params['employees'] ?? -1,
             ], $params));
 
             $url = "{$this->baseUrl}/att/api/monthlyPunchReport/?$query";
@@ -207,7 +207,7 @@ class ZKBiotimeService
                 'end_date' => now()->format('Y-m-d'),
                 'areas' => -1,
                 'groups' => -1,
-                'employees' => -1,
+                'employees' => $params['employees'] ?? -1,
             ], $params));
 
             $url = "{$this->baseUrl}/att/api/timeCardReport/?$query";
@@ -246,7 +246,6 @@ class ZKBiotimeService
                 'data' => $response['data'] ?? [],
                 'next' => $response['next'] ?? null
             ];
-
         } catch (\Exception $e) {
             Log::error('Failed to fetch employees', ['error' => $e->getMessage()]);
             return ['data' => [], 'next' => null];
@@ -289,7 +288,7 @@ class ZKBiotimeService
                 'end_date' => now()->format('Y-m-d'),
                 'areas' => -1,
                 'groups' => -1,
-                'employees' => -1,
+                'employees' => $params['employees'] ?? -1,
             ], $params));
 
             $url = "{$this->baseUrl}/att/api/empSummaryReport/?$query";
@@ -315,16 +314,25 @@ class ZKBiotimeService
         try {
             $params = $this->withDefaultPagination($this->withAllDepartments($params));
             $query = http_build_query(array_merge([
-                'start_date' => now()->format('Y-m-d'),
-                'end_date' => now()->format('Y-m-d'),
+                'start_date' => now()->subDay()->format('Y-m-d'),
+                'end_date' => now()->subDay()->format('Y-m-d'),
                 'areas' => -1,
                 'groups' => -1,
-                'employees' => -1,
+                'employees' => $params['employees'] ?? -1,
             ], $params));
 
             $url = "{$this->baseUrl}/att/api/totalTimeCardReportV2/?$query";
 
-            return Http::withHeaders($this->withAuthHeaders())->get($url)->json();
+            $response = Http::withHeaders($this->withAuthHeaders())->get($url)->json();
+
+            $modifiedData = [];
+            foreach ($response['data'] ?? [] as $record) {
+                $this->mapPaycodes($record);
+                $modifiedData[] = $record;
+            }
+            $response['data'] = $modifiedData;
+
+            return $response;
         } catch (\Exception $e) {
             Log::error('Failed to fetch daily time card report', ['error' => $e->getMessage()]);
             return null;
@@ -340,7 +348,7 @@ class ZKBiotimeService
                 'end_date' => now()->format('Y-m-d'),
                 'areas' => -1,
                 'groups' => -1,
-                'employees' => -1,
+                'employees' => $params['employees'] ?? -1,
             ], $params));
 
             $url = "{$this->baseUrl}/att/api/scheduledPunchReport/?$query";
@@ -364,7 +372,6 @@ class ZKBiotimeService
 
             $allEmployees = array_merge($allEmployees, $response['data']);
             $page++;
-
         } while (isset($response['next'])); // Continue until no more pages
 
         return $allEmployees;
@@ -394,7 +401,7 @@ class ZKBiotimeService
             'department' => [$employee->department_id],
             'position' => $employee->jobTitle?->name,
             'area' => "SIMBA HQ", // Default area ID
-            'area_code'=>2,
+            'area_code' => 2,
             'active_status' => 1,
         ];
 
@@ -444,7 +451,7 @@ class ZKBiotimeService
             'department' => [$employee->department_id],
             'position' => $employee->jobTitle?->name,
             'area' => "SIMBA HQ", // Default area ID
-            'area_code'=>2,
+            'area_code' => 2,
             'active_status' => 1,
         ];
 
@@ -496,5 +503,51 @@ class ZKBiotimeService
             'female', 'f' => 'F',
             default => null,
         };
+    }
+
+
+    /**
+     * Search for an employee in Biotime by employee_code
+     */
+    public function searchEmployeeByCode(string $employeeCode): ?array
+    {
+        try {
+            $query = http_build_query([
+                'page' => 1,
+                'limit' => 20,
+                '_p_emp_code__icontains' => $employeeCode
+            ]);
+            $query = str_replace('%2F', '/', $query); // Keep forward slashes unencoded
+            $url = "{$this->baseUrl}/personnel/employee/table/?$query";
+
+            // Ensure we have an auth token
+            if (!$this->authToken && !$this->authenticate()) {
+                throw new \Exception('Biotime authentication failed.');
+            }
+
+            $headers = [
+                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Encoding' => 'gzip, deflate',
+                'Accept-Language' => 'en-US,en;q=0.5',
+                'Connection' => 'keep-alive',
+                'Host' => parse_url($this->baseUrl, PHP_URL_HOST) . ':' . parse_url($this->baseUrl, PHP_URL_PORT),
+                'Sec-GPC' => '1',
+                'Upgrade-Insecure-Requests' => '1',
+                'User-Agent' => 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36',
+                'Cookie' => "account_info={$this->authToken}; csrftoken=EPZ5xDg5GLzF3jNwS34aIHtLOHO1acoJ; sessionid=eu6kvab742f3qaj134tatchikceyzfey"
+            ];
+
+            $response = Http::withHeaders($headers)->get($url)->json();
+
+            if (isset($response['data']) && is_array($response['data'])) {
+                return $response['data'];
+            }
+
+            Log::warning('Unexpected response from employee search', ['response' => $response, 'employeeCode' => $employeeCode, 'encoded' => urlencode($employeeCode)]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Failed to search employee by code', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 }

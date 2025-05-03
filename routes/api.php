@@ -187,7 +187,9 @@ Route::middleware(['auth:api'])->group(function () {
     //Attendance Routes
     Route::get('/attendance', [AttendanceController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'getAttendance']);
+    Route::get('/attendance/today', [AttendanceController::class, 'getTodayAttendanceData']);
     Route::get('/attendance/{id}', [AttendanceController::class, 'getUserAttendanceDetails']);
+
 
 
     //Organization Routes
