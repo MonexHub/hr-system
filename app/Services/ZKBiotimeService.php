@@ -111,7 +111,7 @@ class ZKBiotimeService
         // Log unmapped paycodes for debugging
         $unmapped = array_diff_key($record, array_flip($this->paycodeLabels));
         if (!empty($unmapped)) {
-            Log::debug('Unmapped keys in API record', $unmapped);
+            // Log::debug('Unmapped keys in API record', $unmapped);
         }
     }
 

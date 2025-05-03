@@ -53,101 +53,32 @@ class FetchAttendanceJob implements ShouldQueue
 
             $biotimeService = app(ZKBiotimeService::class);
 
-            // Preload all employees with external_employee_id
+            // Preload all employees with external_employee_id, using pluck for memory efficiency, log duplicates separately if needed
             $employeesByExternalId = Employee::whereNotNull('external_employee_id')
+                ->select('id', 'employee_code', 'external_employee_id', 'first_name', 'last_name')
                 ->get()
+                ->unique('external_employee_id')
                 ->keyBy('external_employee_id');
 
-            $response = $biotimeService->getMonthlyPunchReport([
-                'start_date' => $this->startDate,
-                'end_date' => $this->endDate,
-                'departments' => $this->departments,
-                'page_size' => 400, // Fetch more records per page
+            Log::info('Loaded employees by external ID', [
+                'keys' => $employeesByExternalId->keys()
             ]);
 
-            // Improved response validation
-            if (!$response) {
-                Log::error('No response from API');
-                return;
-            }
-            // Extract the actual data array where employee records are
-            $attendanceRecords = null;
-
-            if (isset($response['data']['data'])) {
-                // New format with nested data.data
-                $attendanceRecords = $response['data']['data'];
-            } elseif (isset($response['data']) && is_array($response['data'])) {
-                // Directly in data array
-                $attendanceRecords = $response['data'];
-            }
-
-            if (!$attendanceRecords) {
-                Log::error('Could not locate attendance data in API response', [
-                    'response_keys' => is_array($response) ? array_keys($response) : gettype($response)
-                ]);
-                return;
-            }
-
-            // Check if we actually got employee records
-            if (empty($attendanceRecords)) {
-                Log::warning('API returned zero employee records');
-                return;
-            }
-
-            // Get pagination info
-            $totalPages = 1;
-            $currentPage = 1;
-
-            if (isset($response['data']['count']) && isset($response['data']['next'])) {
-                $totalPages = ceil($response['data']['count'] / 100);
-            }
-
-            Log::info('Processing page 1 of employee data', [
-                'total_pages' => $totalPages,
-                'records_count' => count($attendanceRecords)
-            ]);
-
-            $this->processAttendanceData($attendanceRecords, $employeesByExternalId);
-
-            // Process all pages
-            while ($currentPage < $totalPages) {
-                $currentPage++;
-
-                Log::info("Fetching page {$currentPage} of employee data");
-
-                $response = $biotimeService->getMonthlyPunchReport([
-                    'start_date' => $this->startDate,
-                    'end_date' => $this->endDate,
-                    'departments' => $this->departments,
-                    'page' => $currentPage,
-                    'page_size' => 100,
-                ]);
-
-                if (!$response) {
-                    Log::warning("Failed to fetch page {$currentPage}");
-                    continue;
+            // Stream paginated API data using a generator for reduced memory
+            foreach ($this->attendanceApiPages($biotimeService) as $pageIdx => $attendanceRecords) {
+                if ($pageIdx === 0) {
+                    Log::info('Processing page 1 of employee data', [
+                        'records_count' => count($attendanceRecords)
+                    ]);
+                } else {
+                    Log::info("Processing page " . ($pageIdx+1) . " of employee data", [
+                        'records_count' => count($attendanceRecords)
+                    ]);
                 }
-
-                // Extract the actual data array again for this page
-                $attendanceRecords = null;
-
-                if (isset($response['data']['data'])) {
-                    $attendanceRecords = $response['data']['data'];
-                } elseif (isset($response['data']) && is_array($response['data'])) {
-                    $attendanceRecords = $response['data'];
-                }
-
-                if (!$attendanceRecords) {
-                    Log::warning("Could not locate attendance data in API response for page {$currentPage}");
-                    continue;
-                }
-
                 $this->processAttendanceData($attendanceRecords, $employeesByExternalId);
             }
-
             Log::info('Attendance data fetched and processed successfully', [
-                'date_range' => "{$this->startDate} to {$this->endDate}",
-                'total_pages' => $totalPages
+                'date_range' => "{$this->startDate} to {$this->endDate}"
             ]);
         } catch (\Exception $e) {
             Log::error('Error in fetch attendance job', [
@@ -158,48 +89,99 @@ class FetchAttendanceJob implements ShouldQueue
     }
 
     /**
+     * Generator to stream paginated attendance API data in chunks.
+     * @param ZKBiotimeService $biotimeService
+     * @return \Generator
+     */
+    protected function attendanceApiPages(ZKBiotimeService $biotimeService): \Generator
+    {
+        $page = 1;
+        $pageSize = 400;
+        $totalPages = null;
+        do {
+            $params = [
+                'start_date' => $this->startDate,
+                'end_date' => $this->endDate,
+                'departments' => $this->departments,
+                'page' => $page,
+                'page_size' => $pageSize,
+            ];
+            $response = $biotimeService->getMonthlyPunchReport($params);
+            if (!$response) {
+                Log::warning("No response from API for page $page");
+                break;
+            }
+            $attendanceRecords = null;
+            if (isset($response['data']['data'])) {
+                $attendanceRecords = $response['data']['data'];
+            } elseif (isset($response['data']) && is_array($response['data'])) {
+                $attendanceRecords = $response['data'];
+            }
+            if (!$attendanceRecords) {
+                Log::warning("Could not locate attendance data in API response for page $page");
+                break;
+            }
+            if ($totalPages === null) {
+                if (isset($response['data']['count']) && $response['data']['count'] > 0) {
+                    $totalPages = ceil($response['data']['count'] / $pageSize);
+                } else {
+                    $totalPages = 1;
+                }
+            }
+            yield $attendanceRecords;
+            $page++;
+        } while ($totalPages === null || $page <= $totalPages);
+    }
+
+
+    /**
      * Process attendance data from API response
      *
      * @param array $attendanceRecords
      * @param \Illuminate\Support\Collection $employeesByExternalId
      */
+
     protected function processAttendanceData(array $attendanceRecords, $employeesByExternalId): void
     {
         $processedCount = 0;
         $skippedCount = 0;
         $employeeNotFoundCount = 0;
         $emptyTimeEntryCount = 0;
-
-        Log::info('Sample attendance records', [
-            'record_sample' => array_slice($attendanceRecords, 0, 2)
-        ]);
+        $debugMode = config('app.debug');
 
         foreach ($attendanceRecords as $record) {
             try {
+                // Only keep fields needed for mapping and insertion
                 $employeeCode = $record['emp_code'] ?? null;
-
                 if (!$employeeCode || !isset($employeesByExternalId[$employeeCode])) {
                     $employeeNotFoundCount++;
                     $skippedCount++;
                     continue;
                 }
-
                 $employee = $employeesByExternalId[$employeeCode];
+                // Only log in debug mode
+                if ($debugMode) {
+                    Log::debug('Matched employee for record', [
+                        'emp_code_from_api' => $employeeCode,
+                        'employee_id' => $employee->id,
+                        'employee_code' => $employee->employee_code,
+                        'external_employee_id' => $employee->external_employee_id,
+                        'full_name' => $employee->first_name . ' ' . $employee->last_name
+                    ]);
+                }
                 $entriesProcessed = false;
-                $dayCount = count($record['days'] ?? []);
+                $days = $record['days'] ?? [];
+                $dayCount = count($days);
                 $emptyDayCount = 0;
-
-                foreach ($record['days'] as $date => $timeEntry) {
+                foreach ($days as $date => $timeEntry) {
                     if (empty($timeEntry)) {
                         $emptyDayCount++;
                         $emptyTimeEntryCount++;
                         continue;
                     }
-
                     $this->processAttendanceEntry($employee, $date, $timeEntry, $record);
                     $entriesProcessed = true;
                 }
-
                 if ($dayCount > 0 && $emptyDayCount === $dayCount) {
                     Log::info('Employee has all empty time entries', [
                         'employee_id' => $employee->id,
@@ -209,7 +191,6 @@ class FetchAttendanceJob implements ShouldQueue
                         'day_count' => $dayCount
                     ]);
                 }
-
                 if ($entriesProcessed) {
                     $processedCount++;
                 } else {
@@ -224,7 +205,6 @@ class FetchAttendanceJob implements ShouldQueue
                 ]);
             }
         }
-
         Log::info('Attendance processing summary', [
             'processed' => $processedCount,
             'skipped' => $skippedCount,
@@ -369,23 +349,6 @@ class FetchAttendanceJob implements ShouldQueue
                             ($record['weekend_overtime_hours'] ?? 0) +
                             ($record['holiday_overtime_hours'] ?? 0)),
                             'notes'=> "1. Employee was late for {$record['minutes_late']} minutes.". ", 2. Employee left early for {$record['early_timeout']} minutes.",
-                        // 'late_minutes' => (float)($record['minutes_late'] ?? 0),
-                        // 'early_out_minutes' => (float)($record['early_timeout'] ?? 0),
-                        // 'absence_hours' => (float)($record['absent_hours'] ?? 0),
-                        // 'normal_overtime_hours' => (float)($record['normal_overtime_hours'] ?? 0),
-                        // 'weekend_overtime_hours' => (float)($record['weekend_overtime_hours'] ?? 0),
-                        // 'holiday_overtime_hours' => (float)($record['holiday_overtime_hours'] ?? 0),
-                        // 'ot1_hours' => (float)($record['overtime_1'] ?? 0),
-                        // 'ot2_hours' => (float)($record['overtime_2'] ?? 0),
-                        // 'ot3_hours' => (float)($record['overtime_3'] ?? 0),
-                        // 'annual_leave_hours' => (float)($record['annual_leave_hours'] ?? 0),
-                        // 'sick_leave_hours' => (float)($record['sick_leave_hours'] ?? 0),
-                        // 'casual_leave_hours' => (float)($record['casual_leave_hours'] ?? 0),
-                        // 'maternity_leave_hours' => (float)($record['maternity_leave_hours'] ?? 0),
-                        // 'compassionate_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
-                        // 'business_trip_hours' => (float)($record['business_trip_hours'] ?? 0),
-                        // 'compensatory_hours' => (float)($record['compensatory_hours'] ?? 0),
-                        // 'compensatory_leave_hours' => (float)($record['compensatory_leave_hours'] ?? 0),
                         'status' => $this->determineStatus(
                             (float)($record['minutes_late'] ?? 0),
                             (float)($record['early_timeout'] ?? 0),
