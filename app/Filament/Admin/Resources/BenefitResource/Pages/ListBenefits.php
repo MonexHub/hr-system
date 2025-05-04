@@ -10,10 +10,10 @@ class ListBenefits extends ListRecords
 {
     protected static string $resource = BenefitResource::class;
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            Actions\CreateAction::make(),
-        ];
-    }
+//    protected function getHeaderActions(): array
+//    {
+//        return [
+//            Actions\CreateAction::make(),
+//        ];
+//    }
 }

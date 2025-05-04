@@ -7,13 +7,14 @@ use App\Filament\Admin\Resources\PayeeResource\RelationManagers;
 use App\Models\Payee;
 use Filament\Forms;
 use Filament\Forms\Form;
-use Filament\Notifications\Collection;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
+use Filament\Tables\Enums\ActionsPosition;
 
 class PayeeResource extends Resource
 {
@@ -30,6 +31,46 @@ class PayeeResource extends Resource
     protected static ?string $modelLabel = 'PAYE Tax Bracket';
 
     protected static ?string $pluralModelLabel = 'PAYE Tax Brackets';
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'info';
+    }
+
+    public static function canViewAny(): bool
+    {
+        // All roles should be able to view tax brackets for information
+        return Auth::user()->hasAnyRole([
+            'super_admin',
+            'hr_manager',
+            'financial_personnel',
+            'department_head',
+            'employee'
+        ]);
+    }
+
+    public static function canCreate(): bool
+    {
+        // Only HR, finance, and super admin can create tax brackets
+        return Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel']);
+    }
+
+    public static function canEdit($record): bool
+    {
+        // Only HR, finance, and super admin can edit tax brackets
+        return Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel']);
+    }
+
+    public static function canDelete($record): bool
+    {
+        // Only super admin can delete tax brackets
+        return Auth::user()->hasRole('super_admin');
+    }
 
     public static function form(Form $form): Form
     {
@@ -112,6 +153,7 @@ class PayeeResource extends Resource
                         Forms\Components\Textarea::make('description')
                             ->label('Description')
                             ->placeholder('Enter an optional description for this tax bracket')
+                            ->maxLength(1000)
                             ->columnSpanFull(),
                     ]),
             ]);
@@ -167,6 +209,17 @@ class PayeeResource extends Resource
                 Tables\Columns\TextColumn::make('description')
                     ->label('Description')
                     ->limit(30)
+                    ->tooltip(fn (Payee $record): ?string => $record->description)
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -188,7 +241,8 @@ class PayeeResource extends Resource
                             'high' => $query->where('min_amount', '>=', 2000000),
                             default => $query,
                         };
-                    }),
+                    })
+                    ->indicator('Income Range'),
 
                 Tables\Filters\Filter::make('has_no_upper_limit')
                     ->label('Highest Bracket')
@@ -196,24 +250,23 @@ class PayeeResource extends Resource
             ])
             ->actions([
                 Tables\Actions\ActionGroup::make([
-                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\ViewAction::make()
+                        ->icon('heroicon-o-eye'),
 
-                    // Custom delete action instead of DeleteAction
-                    Tables\Actions\Action::make('delete')
-                        ->label('Delete')
-                        ->color('danger')
-                        ->icon('heroicon-m-trash')
-                        ->requiresConfirmation()
-                        ->modalHeading('Delete Tax Bracket')
-                        ->modalDescription('Are you sure you want to delete this tax bracket? This action cannot be undone.')
-                        ->action(function (Payee $record) {
-                            $record->delete();
-                        }),
+                    Tables\Actions\EditAction::make()
+                        ->icon('heroicon-o-pencil')
+                        ->tooltip('Edit tax bracket')
+                        ->visible(fn () => Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel'])),
+
+                    Tables\Actions\DeleteAction::make()
+                        ->icon('heroicon-o-trash')
+                        ->visible(fn () => Auth::user()->hasRole('super_admin')),
 
                     Tables\Actions\Action::make('calculate')
                         ->label('Calculate Example')
                         ->icon('heroicon-o-calculator')
                         ->color('gray')
+                        ->tooltip('Calculate tax for custom amount')
                         ->form([
                             Forms\Components\TextInput::make('salary')
                                 ->label('Enter Income Amount')
@@ -225,7 +278,7 @@ class PayeeResource extends Resource
                             $tax = $record->calculateTaxFor((float) $data['salary']);
                             $percentage = number_format(($tax / (float) $data['salary']) * 100, 2);
 
-                           Notification::make()
+                            Notification::make()
                                 ->title('Tax Calculation Result')
                                 ->body("For income of TSh " . number_format($data['salary'], 0) .
                                     ":\nTax amount: TSh " . number_format($tax, 0) .
@@ -233,21 +286,13 @@ class PayeeResource extends Resource
                                 ->success()
                                 ->send();
                         }),
-                ]),
+                ])
             ])
+            ->actionsPosition(ActionsPosition::BeforeColumns)
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\BulkAction::make('deleteBulk')
-                        ->label('Delete Selected')
-                        ->color('danger')
-                        ->icon('heroicon-m-trash')
-                        ->requiresConfirmation()
-                        ->modalHeading('Delete Selected Tax Brackets')
-                        ->modalDescription('Are you sure you want to delete the selected tax brackets? This action cannot be undone.')
-                        ->deselectRecordsAfterCompletion()
-                        ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
-                            $records->each->delete();
-                        }),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => Auth::user()->hasRole('super_admin')),
 
                     Tables\Actions\BulkAction::make('export')
                         ->label('Export Selected')
@@ -255,8 +300,6 @@ class PayeeResource extends Resource
                         ->color('success')
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records): void {
                             // Logic to export the selected records
-                            // This would typically generate a CSV or Excel file
-
                             $data = $records->map(function ($record) {
                                 return [
                                     'min_amount' => $record->min_amount,
@@ -269,12 +312,13 @@ class PayeeResource extends Resource
 
                             // In a real implementation, you would generate the file here
 
-                           Notification::make()
+                            Notification::make()
                                 ->title('Export Complete')
                                 ->body('Successfully exported ' . $records->count() . ' tax brackets.')
                                 ->success()
                                 ->send();
-                        }),
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ])
             ->defaultSort('min_amount')
@@ -282,14 +326,15 @@ class PayeeResource extends Resource
                 Tables\Actions\CreateAction::make()
                     ->label('Create New Tax Bracket')
                     ->icon('heroicon-m-plus')
-                    ->color('primary'),
+                    ->color('primary')
+                    ->visible(fn () => Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel'])),
 
                 Tables\Actions\Action::make('help')
                     ->label('Tax Calculation Guide')
                     ->icon('heroicon-o-information-circle')
                     ->color('gray')
                     ->action(function (): void {
-                       Notification::make()
+                        Notification::make()
                             ->title('PAYE Tax Calculation Guide')
                             ->body("1. Find the applicable bracket for the income level\n2. Calculate taxable amount (income - bracket's minimum)\n3. Apply the percentage rate to the taxable amount\n4. Add the fixed amount\n\nThis gives the total PAYE tax amount.")
                             ->persistent()
@@ -317,5 +362,10 @@ class PayeeResource extends Resource
             'create' => Pages\CreatePayee::route('/create'),
             'edit' => Pages\EditPayee::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery();
     }
 }

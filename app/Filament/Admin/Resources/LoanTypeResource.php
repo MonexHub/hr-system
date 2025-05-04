@@ -3,7 +3,6 @@
 namespace App\Filament\Admin\Resources;
 
 use App\Filament\Admin\Resources\LoanTypeResource\Pages;
-use App\Filament\Admin\Resources\LoanTypeResource\RelationManagers;
 use App\Filament\Resources\LoanTypeResource\RelationManagers\EmployeeLoansRelationManager;
 use App\Models\LoanType;
 use Filament\Forms;
@@ -13,6 +12,9 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
+use Filament\Tables\Enums\ActionsPosition;
+use Filament\Support\Enums\IconPosition;
 
 class LoanTypeResource extends Resource
 {
@@ -24,7 +26,50 @@ class LoanTypeResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 5;
+
+    protected static ?string $modelLabel = 'Loan Type';
+
+    protected static ?string $pluralModelLabel = 'Loan Types';
+
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'primary';
+    }
+
+    public static function canViewAny(): bool
+    {
+        // Allow access for roles that should see loan information
+        return Auth::user()->hasAnyRole([
+            'super_admin',
+            'hr_manager',
+            'financial_personnel',
+            'department_head'
+        ]);
+    }
+
+    public static function canCreate(): bool
+    {
+        // Only HR, finance, and super admin can create loan types
+        return Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel']);
+    }
+
+    public static function canEdit($record): bool
+    {
+        // Only HR, finance, and super admin can edit loan types
+        return Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel']);
+    }
+
+    public static function canDelete($record): bool
+    {
+        // Only super admin can delete loan types
+        return Auth::user()->hasRole('super_admin');
+    }
 
     public static function form(Form $form): Form
     {
@@ -45,7 +90,8 @@ class LoanTypeResource extends Resource
                             ->required()
                             ->maxLength(50)
                             ->placeholder('EMP-ADV')
-                            ->unique(ignorable: fn ($record) => $record),
+                            ->unique(ignorable: fn ($record) => $record)
+                            ->rules(['required', 'max:50']),
                     ])->columns(3),
 
                 Forms\Components\Section::make('Financial Parameters')
@@ -59,7 +105,10 @@ class LoanTypeResource extends Resource
                             ->prefix('TSh')
                             ->label('Minimum Salary')
                             ->helperText('Minimum salary required to qualify')
-                            ->minValue(0),
+                            ->minValue(0)
+                            ->formatStateUsing(fn ($state) => $state ? number_format($state, 0) : null)
+                            ->dehydrateStateUsing(fn ($state) => str_replace(',', '', $state))
+                            ->placeholder('0'),
 
                         Forms\Components\TextInput::make('max_amount_cap')
                             ->required()
@@ -67,15 +116,19 @@ class LoanTypeResource extends Resource
                             ->prefix('TSh')
                             ->label('Maximum Amount')
                             ->helperText('Maximum loan amount that can be issued')
-                            ->minValue(0),
+                            ->minValue(0)
+                            ->formatStateUsing(fn ($state) => $state ? number_format($state, 0) : null)
+                            ->dehydrateStateUsing(fn ($state) => str_replace(',', '', $state))
+                            ->placeholder('0'),
 
                         Forms\Components\TextInput::make('repayment_months')
                             ->required()
                             ->numeric()
                             ->integer()
                             ->minValue(1)
+                            ->maxValue(60)
                             ->suffix('months')
-                            ->helperText('Duration of loan repayment period'),
+                            ->helperText('Duration of loan repayment period (1-60 months)'),
                     ])->columns(3),
 
                 Forms\Components\Section::make('Additional Information')
@@ -97,7 +150,9 @@ class LoanTypeResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->searchable()
                     ->weight('bold')
-                    ->icon('heroicon-o-tag'),
+                    ->icon('heroicon-o-tag')
+                    ->copyable()
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('code')
                     ->searchable()
@@ -105,22 +160,34 @@ class LoanTypeResource extends Resource
                     ->color('success'),
 
                 Tables\Columns\TextColumn::make('minimum_salary_required')
-                    ->money('TZS')
+                    ->money('TSH')
                     ->label('Min. Salary')
                     ->sortable()
                     ->alignRight(),
 
                 Tables\Columns\TextColumn::make('max_amount_cap')
-                    ->money('TZS')
+                    ->money('TSH')
                     ->label('Max. Amount')
                     ->sortable()
                     ->alignRight()
                     ->color('primary'),
 
+                Tables\Columns\TextColumn::make('eligible_salary_range')
+                    ->label('Salary Range')
+                    ->state(function (LoanType $record): string {
+                        $min = number_format($record->minimum_salary_required, 0);
+                        return "TSh {$min}+";
+                    })
+                    ->tooltip('Minimum eligible salary')
+                    ->searchable(false)
+                    ->sortable(false)
+                    ->toggleable(),
+
                 Tables\Columns\TextColumn::make('repayment_months')
                     ->suffix(' months')
                     ->sortable()
-                    ->icon('heroicon-o-clock')
+                    ->icon('heroicon-m-clock')
+                    ->iconPosition(IconPosition::Before)
                     ->color('warning'),
 
                 Tables\Columns\TextColumn::make('created_at')
@@ -141,7 +208,11 @@ class LoanTypeResource extends Resource
                         12 => '12 months',
                         24 => '24 months',
                         36 => '36 months',
-                    ]),
+                        48 => '48 months',
+                        60 => '60 months',
+                    ])
+                    ->indicator('Repayment Period'),
+
                 Tables\Filters\Filter::make('minimum_salary_required')
                     ->form([
                         Forms\Components\TextInput::make('minimum_salary_required_from')
@@ -163,6 +234,35 @@ class LoanTypeResource extends Resource
                                 $data['minimum_salary_required_to'],
                                 fn (Builder $query, $amount): Builder => $query->where('minimum_salary_required', '<=', $amount),
                             );
+                    })
+                    ->indicator(function (array $data): ?string {
+                        if (!$data['minimum_salary_required_from'] && !$data['minimum_salary_required_to']) {
+                            return null;
+                        }
+
+                        if ($data['minimum_salary_required_from'] && $data['minimum_salary_required_to']) {
+                            return 'Salary: ' . $data['minimum_salary_required_from'] . ' to ' . $data['minimum_salary_required_to'];
+                        }
+
+                        return $data['minimum_salary_required_from']
+                            ? 'Salary from: ' . $data['minimum_salary_required_from']
+                            : 'Salary to: ' . $data['minimum_salary_required_to'];
+                    }),
+
+                Tables\Filters\SelectFilter::make('loan_category')
+                    ->label('Loan Category')
+                    ->options([
+                        'short_term' => 'Short Term (1-12 months)',
+                        'medium_term' => 'Medium Term (13-36 months)',
+                        'long_term' => 'Long Term (37+ months)',
+                    ])
+                    ->query(function (Builder $query, array $data) {
+                        return match ($data['value']) {
+                            'short_term' => $query->where('repayment_months', '<=', 12),
+                            'medium_term' => $query->whereBetween('repayment_months', [13, 36]),
+                            'long_term' => $query->where('repayment_months', '>=', 37),
+                            default => $query,
+                        };
                     }),
             ])
             ->actions([
@@ -170,12 +270,17 @@ class LoanTypeResource extends Resource
                     Tables\Actions\ViewAction::make()
                         ->icon('heroicon-o-eye'),
                     Tables\Actions\EditAction::make()
-                        ->icon('heroicon-o-pencil'),
+                        ->icon('heroicon-o-pencil')
+                        ->tooltip('Edit loan type')
+                        ->visible(fn () => Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel'])),
                     Tables\Actions\DeleteAction::make()
-                        ->icon('heroicon-o-trash'),
+                        ->icon('heroicon-o-trash')
+                        ->visible(fn () => Auth::user()->hasRole('super_admin')),
                     Tables\Actions\Action::make('clone')
                         ->icon('heroicon-o-document-duplicate')
                         ->color('info')
+                        ->tooltip('Clone loan type')
+                        ->visible(fn () => Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel']))
                         ->action(function (LoanType $record) {
                             $clone = $record->replicate();
                             $clone->name = "Copy of {$record->name}";
@@ -184,19 +289,37 @@ class LoanTypeResource extends Resource
                         }),
                 ])
             ])
+            ->actionsPosition(ActionsPosition::BeforeColumns)
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => Auth::user()->hasRole('super_admin')),
+                    Tables\Actions\BulkAction::make('export')
+                        ->label('Export Selected')
+                        ->icon('heroicon-o-arrow-down-tray')
+                        ->color('success')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records): void {
+                            // Add export logic here
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
+            ])
+            ->defaultSort('name')
+            ->headerActions([
+                Tables\Actions\CreateAction::make()
+                    ->label('Create New Loan Type')
+                    ->icon('heroicon-m-plus')
+                    ->color('primary')
+                    ->visible(fn () => Auth::user()->hasAnyRole(['super_admin', 'hr_manager', 'financial_personnel'])),
             ]);
     }
+
     public static function getRelations(): array
     {
         return [
             EmployeeLoansRelationManager::make(),
         ];
     }
-
 
     public static function getPages(): array
     {
@@ -205,5 +328,13 @@ class LoanTypeResource extends Resource
             'create' => Pages\CreateLoanType::route('/create'),
             'edit' => Pages\EditLoanType::route('/{record}/edit'),
         ];
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // No role-based filtering needed for loan types as they are administrative data
+        return $query;
     }
 }

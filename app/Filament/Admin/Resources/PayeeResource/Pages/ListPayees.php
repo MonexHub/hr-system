@@ -10,13 +10,13 @@ class ListPayees extends ListRecords
 {
     protected static string $resource = PayeeResource::class;
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            // Use a standard Action instead of DeleteAction
-            Actions\CreateAction::make()
-                ->label('Create New Tax Bracket'),
-        ];
-    }
+//    protected function getHeaderActions(): array
+//    {
+//        return [
+//            // Use a standard Action instead of DeleteAction
+//            Actions\CreateAction::make()
+//                ->label('Create New Tax Bracket'),
+//        ];
+//    }
 
 }
