@@ -18,6 +18,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 
 class AttendanceResource extends Resource
 {
@@ -25,17 +26,66 @@ class AttendanceResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    protected static ?string $model = Attendance::class;
+
+    // Allow access to all authenticated users
+    public static function canAccess(): bool
+    {
+        return auth()->check();
+    }
+
+    // This is the key method that limits what data users can see
+    public static function getEloquentQuery(): Builder
+    {
+        $query = parent::getEloquentQuery();
+
+        // Get current user
+        $user = auth()->user();
+
+        // If user has privileged role, show all records
+        if ($user->hasAnyRole(['super_admin', 'chief_executive_officer', 'hr_manager'])) {
+            return $query;
+        }
+
+        // Otherwise, only show records for the current employee
+        $employeeId = $user->employee->id ?? null;
+        return $query->where('employee_id', $employeeId);
+    }
+
     public static function form(Form $form): Form
     {
+        $user = auth()->user();
+        $isPrivilegedUser = $user->hasAnyRole(['super_admin', 'chief_executive_officer', 'hr_manager']);
+
         return $form
             ->schema([
                 Forms\Components\Section::make('Employee Information')
                     ->schema([
                         Forms\Components\Select::make('employee_id')
                             ->label('Employee')
-                            ->options(Employee::query()->pluck('first_name', 'id'))
+                            ->options(function () use ($isPrivilegedUser, $user) {
+                                // For privileged users, show all employees
+                                if ($isPrivilegedUser) {
+                                    return Employee::query()->pluck('first_name', 'id');
+                                }
+
+                                // For regular users, only show themselves
+                                $employeeId = $user->employee->id ?? null;
+                                return Employee::query()
+                                    ->where('id', $employeeId)
+                                    ->pluck('first_name', 'id');
+                            })
                             ->searchable()
-                            ->required(),
+                            ->required()
+                            // Disable changing employee for non-privileged users
+                            ->disabled(!$isPrivilegedUser)
+                            // Default to current employee for non-privileged users
+                            ->default(function () use ($isPrivilegedUser, $user) {
+                                if (!$isPrivilegedUser) {
+                                    return $user->employee->id ?? null;
+                                }
+                                return null;
+                            }),
 
                         Forms\Components\DatePicker::make('date')
                             ->required()
@@ -104,6 +154,8 @@ class AttendanceResource extends Resource
 
     public static function table(Table $table): Table
     {
+        $isPrivilegedUser = auth()->user()->hasAnyRole(['super_admin', 'chief_executive_officer', 'hr_manager']);
+
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('employee.first_name')
@@ -176,22 +228,27 @@ class AttendanceResource extends Resource
                         'holiday' => 'Holiday',
                     ]),
 
+                // Only show employee filter to privileged users
                 SelectFilter::make('employee')
                     ->relationship('employee', 'first_name')
                     ->searchable()
-                    ->preload(),
+                    ->preload()
+                    ->visible($isPrivilegedUser),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                // Only show delete action to privileged users
+                Tables\Actions\DeleteAction::make()
+                    ->visible($isPrivilegedUser),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Only show bulk delete to privileged users
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible($isPrivilegedUser),
                 ]),
             ]);
     }
-
 
     public static function getPages(): array
     {
@@ -199,14 +256,20 @@ class AttendanceResource extends Resource
             'index' => Pages\ListAttendances::route('/'),
             'create' => Pages\CreateAttendance::route('/create'),
             'edit' => Pages\EditAttendance::route('/{record}/edit'),
-//            'sync' => Pages\SyncAttendance::route('/sync'),
         ];
     }
 
     public static function getNavigationBadge(): ?string
     {
-        return static::getModel()::where('date', today())
-            ->where('status', 'pending')
-            ->count();
+        $query = static::getModel()::where('date', today())
+            ->where('status', 'pending');
+
+        // For non-privileged users, only count their own records
+        if (!auth()->user()->hasAnyRole(['super_admin', 'chief_executive_officer', 'hr_manager'])) {
+            $employeeId = auth()->user()->employee->id ?? null;
+            $query->where('employee_id', $employeeId);
+        }
+
+        return $query->count();
     }
 }

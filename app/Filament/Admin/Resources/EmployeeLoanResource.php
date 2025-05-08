@@ -497,8 +497,6 @@ class EmployeeLoanResource extends Resource
                 $query->where('id', 0);
             }
         }
-        // HR, super admin, and financial see everything (no filter)
-
         return $query;
     }
 }
