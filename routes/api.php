@@ -16,6 +16,14 @@ use App\Http\Controllers\Api\ZkbiotimeController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+
+Route::prefix('auth')->group(function () {
+    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+});
+
+Route::middleware(['auth:api'])->group(function () {
+
 Route::prefix('zkbiotime')->group(function () {
     // List all employees
     Route::get('/employees', [ZkbiotimeController::class, 'index']);
@@ -41,16 +49,6 @@ Route::prefix('zkbiotime')->group(function () {
         Route::get('/scheduled-punch-report', 'scheduledPunchReport');
     });
 });
-
-
-Route::prefix('auth')->group(function () {
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
-});
-
-Route::middleware(['auth:api'])->group(function () {
-
-
 
     Route::prefix('jobs')->group(function () {
         // Create a job post
