@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-
 class Payroll extends Model
 {
     protected $fillable = [
@@ -33,15 +32,41 @@ class Payroll extends Model
         return $this->belongsTo(Employee::class);
     }
 
-    // Optionally add relationships that will be added later
-    public function deductions()
+    public function payrollBenefits(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
     {
-        return $this->hasMany(Deduction::class);
+        // Use a custom query to fetch benefits for this payroll's employee
+        return $this->hasOneThrough(
+            EmployeeBenefit::class,
+            Employee::class,
+            'id', // Foreign key on Employee
+            'employee_id', // Foreign key on EmployeeBenefit
+            'employee_id', // Foreign key on Payroll
+            'id' // Local key on Employee
+        );
     }
 
+    public function payrollDeductions(): \Illuminate\Database\Eloquent\Relations\HasOneThrough
+    {
+        // Use a custom query to fetch deductions for this payroll's employee
+        return $this->hasOneThrough(
+            EmployeeDeduction::class,
+            Employee::class,
+            'id', // Foreign key on Employee
+            'employee_id', // Foreign key on EmployeeDeduction
+            'employee_id', // Foreign key on Payroll
+            'id' // Local key on Employee
+        );
+    }
+
+    // For backward compatibility, create these aliases
     public function benefits()
     {
-        return $this->hasMany(Benefit::class);
+        return $this->payrollBenefits();
+    }
+
+    public function deductions()
+    {
+        return $this->payrollDeductions();
     }
 
     public function financial()

@@ -28,4 +28,9 @@ class EmployeeDeduction extends Model
     {
         return $this->belongsTo(Deduction::class);
     }
+
+    public function scopeActive($query)
+    {
+        return $query->where('active', true);
+    }
 }

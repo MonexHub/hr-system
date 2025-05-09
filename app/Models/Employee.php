@@ -56,6 +56,7 @@ class Employee extends Model
         'net_salary',
         'salary',
         'reporting_to',
+        'external_employee_id'
     ];
 
     protected $casts = [
@@ -241,6 +242,21 @@ class Employee extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(EmployeeDocument::class);
+    }
+
+    public function employeeBenefits(): HasMany
+    {
+        return $this->hasMany(EmployeeBenefit::class);
+    }
+
+    public function employeeDeductions(): HasMany
+    {
+        return $this->hasMany(EmployeeDeduction::class);
+    }
+
+    public function employeeLoans(): HasMany
+    {
+        return $this->hasMany(EmployeeLoan::class);
     }
 
 
@@ -687,6 +703,8 @@ class Employee extends Model
         return $this->email;
     }
 
+
+
     public function scopeOnProbation($query)
     {
         return $query->where('contract_type', 'probation')
@@ -761,4 +779,27 @@ class Employee extends Model
 
         return now()->diffInDays($probationEndDate);
     }
+
+    // a payrolls relationship which relates to the payroll table
+    public function payrolls(): HasMany
+    {
+        return $this->hasMany(Payroll::class);
+    }
+
+    //  a deductions relationship which relates to the deductions table
+    public function deductions(): HasMany
+    {
+        return $this->hasMany(EmployeeDeduction::class);
+    }
+    //  a benefits relationship which relates to the benefits table
+    public function benefits(): HasMany
+    {
+        return $this->hasMany(EmployeeBenefit::class);
+    }
+    //  a loans relationship which relates to the loans table
+    public function loans(): HasMany
+    {
+        return $this->hasMany(EmployeeLoan::class);
+    }
+
 }

@@ -5,10 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
+use Spatie\Permission\Traits\HasRoles;
 
 class AppSettings extends Model
 {
     use HasFactory;
+    use HasRoles;
 
     protected $table = 'settings';
 

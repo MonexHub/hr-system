@@ -42,7 +42,7 @@ class EmployeeResource extends Resource implements HasShieldPermissions
     protected static ?int $navigationSort = 1;
 
 
-    
+
     public static function form(Form $form): Form
     {
         return $form
@@ -66,6 +66,12 @@ class EmployeeResource extends Resource implements HasShieldPermissions
                                         ->columnSpan(3),
                                     Forms\Components\Section::make()
                                         ->schema([
+                                            Forms\Components\TextInput::make('external_employee_id')
+//                                                ->default('EMP-' . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT))
+
+                                                ->dehydrated()
+                                                ->label('External Employee ID')
+                                                ->required(),
                                             Forms\Components\TextInput::make('employee_code')
                                                 ->default('EMP-' . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT))
                                                 ->disabled()

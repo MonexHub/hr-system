@@ -38,6 +38,11 @@ class ShieldSeeder extends Seeder
                 'permissions' => $this->getDepartmentHeadPermissions()
             ],
             [
+                'name' => 'financial_personnel',
+                'guard_name' => 'web',
+                'permissions' => $this->getFinancialPersonnelPermissions()
+            ],
+            [
                 'name' => 'employee',
                 'guard_name' => 'web',
                 'permissions' => $this->getEmployeePermissions()
@@ -226,6 +231,70 @@ class ShieldSeeder extends Seeder
 
             // Performance Management
             'supervisor_approve_performance::appraisal'
+        ];
+    }
+
+    protected function getFinancialPersonnelPermissions(): array
+    {
+        return [
+            // Payroll Management
+            'view_payroll',
+            'view_any_payroll',
+            'create_payroll',
+            'update_payroll',
+            'generate_payroll',
+            'process_payment',
+            'view_payment_log',
+
+            // Employee Financial Information
+            'view_employee',
+            'view_any_employee',
+            'update_employee_financial',
+            'view_employee_financial',
+
+            // Benefits and Deductions
+            'view_benefit',
+            'view_any_benefit',
+            'create_benefit',
+            'update_benefit',
+            'delete_benefit',
+
+            'view_deduction',
+            'view_any_deduction',
+            'create_deduction',
+            'update_deduction',
+            'delete_deduction',
+
+            // Employee Loans
+            'view_employee_loan',
+            'view_any_employee_loan',
+            'create_employee_loan',
+            'update_employee_loan',
+            'process_loan_payment',
+
+            // Financial Reporting
+            'view_financial_dashboard',
+            'generate_financial_reports',
+            'export_payroll_data',
+            'view_payroll_summary',
+
+            // PAYE and Tax Management
+            'view_payee',
+            'view_any_payee',
+            'create_payee',
+            'update_payee',
+            'generate_tax_reports',
+
+            // Banking and Payment Processing
+            'manage_bank_connections',
+            'view_payment_history',
+            'process_bulk_payments',
+            'download_payslip',
+
+            // Settings
+            'manage_financial_settings',
+            'manage_payment_methods',
+            'manage_currency_settings'
         ];
     }
 

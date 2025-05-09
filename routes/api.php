@@ -12,8 +12,35 @@ use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\JobPostingController;
 use App\Http\Controllers\Api\NotificationPreferenceController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Controllers\Api\ZkbiotimeController;
 
 Route::post('/login', [AuthController::class, 'login']);
+
+Route::prefix('zkbiotime')->group(function () {
+    // List all employees
+    Route::get('/employees', [ZkbiotimeController::class, 'index']);
+
+    // Get a specific employee
+    Route::get('/employees/{id}', [ZkbiotimeController::class, 'show']);
+
+    // Create a new employee
+    Route::post('/employees', [ZkbiotimeController::class, 'store']);
+
+    // Update an employee
+    Route::put('/employees/{id}', [ZkbiotimeController::class, 'update']);
+
+    // Delete an employee
+    Route::delete('/employees/{id}', [ZkbiotimeController::class, 'destroy']);
+
+
+    Route::prefix('attendance')->controller(ZkbiotimeController::class)->group(function () {
+        Route::get('/time-card-report', 'timeCardReport');
+        Route::get('/monthly-punch-report', 'monthlyPunchReport');
+        Route::get('/attendance-summary', 'attendanceSummary');
+        Route::get('/daily-time-card-report', 'dailyTimeCardReport');
+        Route::get('/scheduled-punch-report', 'scheduledPunchReport');
+    });
+});
 
 
 Route::prefix('auth')->group(function () {
@@ -22,6 +49,8 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware(['auth:api'])->group(function () {
+
+
 
     Route::prefix('jobs')->group(function () {
         // Create a job post
@@ -119,7 +148,7 @@ Route::middleware(['auth:api'])->group(function () {
         Route::post('generate/employee/{employee}', 'generateForEmployee');    // Generate payroll for a specific employee
 
         // List and view payroll
-        Route::post('list/all', 'index');
+        Route::get('list/all', 'index');
         Route::get('employee/{employee}/list', 'listPayrollsForEmployee');     // List all payrolls for an employee
         Route::get('details/{payrollId}', 'getPayrollDetails');                // Get full payroll detail
 
@@ -129,6 +158,10 @@ Route::middleware(['auth:api'])->group(function () {
 
         // Download payslip PDF
         Route::get('payslip/{payrollId}/download', 'downloadPayslip');         // Download payslip as PDF
+        Route::get('employee/{employee}/summary', 'getFinancialSummary');                 // Get a summary of an employee's financials
+        Route::get('company-summary', 'getCompanyFinancialSummary');                    // Get a summary of the company's financials
+        Route::get('deductions', 'getCompanyDeductions');                    // Get a summary of the company's financials
+        Route::get('benefits', 'getCompanyBenefits');                    // Get a summary of the company's financials
     });
 
 
@@ -151,25 +184,17 @@ Route::middleware(['auth:api'])->group(function () {
         Route::delete('/{id}', [AnnouncementController::class, 'destroy']);
     });
 
-
-
-
-
-
-
-
     //Attendance Routes
     Route::get('/attendance', [AttendanceController::class, 'index']);
     Route::get('/attendances', [AttendanceController::class, 'getAttendance']);
+    Route::get('/attendance/today', [AttendanceController::class, 'getTodayAttendanceData']);
     Route::get('/attendance/{id}', [AttendanceController::class, 'getUserAttendanceDetails']);
+
 
 
     //Organization Routes
     Route::get('/departments', [OrganizationController::class, 'departments']);
     Route::get('/jobtitles', [OrganizationController::class, 'jobTitles']);
-
-
-
     //Notification Preferences
     Route::resource('notification-preferences', NotificationPreferenceController::class);
 });

@@ -8,6 +8,8 @@ use App\Services\PayrollService;
 use Illuminate\Support\Carbon;
 use App\Http\Controllers\Controller;
 use App\Models\Payroll;
+use App\Models\Deduction;
+use App\Models\Benefit;
 
 class PayrollController extends Controller
 {
@@ -60,6 +62,7 @@ class PayrollController extends Controller
     public function listPayrollsForEmployee(Employee $employee)
     {
         $payrolls = $employee->payrolls()
+            ->with('employee')
             ->orderBy('period', 'desc')
             ->get();
 
@@ -112,9 +115,69 @@ class PayrollController extends Controller
             ], 422);
         }
     }
+
     public function downloadPayslip($payrollId)
     {
         $payroll = Payroll::findOrFail($payrollId);
         return $this->payrollService->generatePayslipPDF($payroll);
+    }
+
+    public function getFinancialSummary(Employee $employee, Request $request)
+    {
+        $period = $request->input('period');
+
+        if ($period) {
+            $summary = $this->payrollService->getFinancialSummary($employee, Carbon::parse($period));
+        } else {
+            $summary = $this->payrollService->getLifetimeFinancialSummary($employee);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Employee financial summary retrieved successfully',
+            'data' => $summary,
+        ]);
+    }
+
+    public function getCompanyFinancialSummary(Request $request)
+    {
+        $filters = [
+            'department_id' => $request->input('department_id'),
+            'employee_id' => $request->input('employee_id'),
+            'year' => $request->input('year'),
+            'month' => $request->input('month'),
+        ];
+
+        $summary = $this->payrollService->getCompanyFinancialSummary($filters);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company financial summary retrieved successfully',
+            'data' => $summary,
+        ]);
+    }
+
+
+    //create a function to get the list of all company deductions
+    public function getCompanyDeductions()
+    {
+        $deductions = Deduction::all();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company deductions retrieved successfully',
+            'data' => $deductions,
+        ]);
+    }
+    //create a function to get the list of all company benefits
+    public function getCompanyBenefits()
+    {
+        $benefits = Benefit::all();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Company benefits retrieved successfully',
+            'data' => $benefits,
+        ]);
     }
 }
